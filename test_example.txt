@@ -1,0 +1,135 @@
+nahida char lvl=90/90 cons=2 talent=6,10,10;
+nahida add weapon="prototypeamber" refine=5 lvl=90/90;
+nahida add set="wandererstroupe" count=1;
+nahida add set="deepwoodmemories" count=4;
+nahida add stats def%=0.131 def=42 hp=5557 hp%=0.09300000000000001 atk=311 atk%=0.145 er=0.615 em=580.5 cr=0.303 cd=0.568;
+
+alhaitham char lvl=90/90 cons=0 talent=10,10,10;
+alhaitham add weapon="mistsplitterreforged" refine=1 lvl=90/90;
+alhaitham add set="gildeddreams" count=2;
+alhaitham add set="blizzardstrayer" count=1;
+alhaitham add set="wandererstroupe" count=2;
+alhaitham add stats def%=0.197 def=58 hp=4780 hp%=0.047 atk=330 atk%=0.094 er=0.24 em=251.5 cr=0.6219999999999999 cd=0.9699999999999999 dendro%=0.466;
+
+furina char lvl=90/90 cons=2 talent=6,10,10;
+furina add weapon="splendoroftranquilwaters" refine=1 lvl=90/90;
+furina add set="goldentroupe" count=4;
+furina add set="gladiatorsfinale" count=1;
+furina add stats def%=0.20400000000000001 def=74 hp=5437 hp%=0.466 atk=311 atk%=0.047 er=1.075 cr=0.45499999999999996 cd=1.291;
+
+kuki char lvl=90/90 cons=3 talent=1,10,6;
+kuki add weapon="xiphosmoonlight" refine=1 lvl=90/90;
+kuki add set="flowerofparadiselost" count=4;
+kuki add set="desertpavilionchronicle" count=1;
+kuki add stats def%=0.131 def=76 hp=6483 hp%=0.35 atk=329 atk%=0.047 er=0.278 em=701.5 cr=0.151 cd=0.23299999999999998;
+
+options swap_delay=1 iteration=1000 ignore_burst_energy=false;
+target lvl=100 type=dummy radius=1 pos=0,1.5 particle_threshold=520000 particle_drop_count=3; #Energy based on 12-3 Icewind Suite base stats
+
+active nahida;
+
+fn doActionList() {
+  nahida skill[hold=12];
+  for let r=0; r<4; r=r+1 {
+    furina skill, dash, burst;
+    if r > 0 {
+      nahida skill[hold=12];
+    }
+    nahida burst;
+    kuki skill;
+    alhaitham burst;
+    if .kuki.burst.ready {
+      kuki burst;
+    } else {
+      nahida attack:2, charge;
+    }
+    alhaitham attack:3, dash, 
+              attack:3, charge, dash,
+              attack:3, charge, dash,
+              skill[hold=1]; alhaithamLowPlunge();
+    alhaitham attack:3, charge, dash,
+              attack:3;
+  }
+}
+
+fn alhaithamLowPlunge() {
+  if rand() < 1/3 { #1/3 chance to get the short plunge animation
+    alhaitham low_plunge[short=1];
+  } else {
+    alhaitham low_plunge;
+  }
+}
+
+#Random action execution delays
+fn randy(mean, standardDeviation, min, max, display) {
+  let value = randnorm() * standardDeviation + mean;
+  if display {
+    print("initial roll: ", value);
+  }
+  if value > max {
+    value = max;
+  } else if value < min {
+    value = min;
+  }
+  if display {
+    print("final value: ", value);
+  }
+  return value;
+}
+
+let prev_char_id = -1;
+switch {
+  case .alhaitham.onfield:
+    prev_char_id = .keys.char.alhaitham;
+  case .furina.onfield:
+    prev_char_id = .keys.char.furina;
+  case .nahida.onfield:
+    prev_char_id = .keys.char.nahida;
+  default:
+    prev_char_id = .keys.char.kuki;
+} #this switch statement prevents "swap delay" from being added at the start of each iteration when the first action is not actually a swap
+let prev_action_id = -1;
+
+let _execute_action = execute_action;
+fn execute_action(char_id number, action_id number, p map) {
+
+  if prev_char_id != char_id && action_id != .action.swap {
+    execute_action(char_id, .action.swap, []);
+  }
+  
+  if action_id == .action.dash {
+    pick_up_crystallize("any");
+  } #pick up a crystallize if available when dashing
+
+  if action_id == .action.burst {
+    while .alhaitham.onfield && !.alhaitham.burst.ready {
+      alhaitham attack;
+    }
+    while .furina.onfield && !.furina.burst.ready {
+      furina attack;
+    }
+    while .nahida.onfield && !.nahida.burst.ready {
+      nahida attack;
+    }
+    while .kuki.onfield && !.kuki.burst.ready {
+      kuki attack;
+    }
+  } #when trying to burst, attack until burst is ready
+
+  if action_id == .action.swap {
+    delay(randy(9.5, 1.5, 8, 17, 0)); #SWAP DELAY (frames, including 1f base): mean 10.5 stddev 1.5, bounds: 9-18f
+                                                     #corresponding ping (ms): mean 87.5 stddev 12.5, bounds: 75-150ms
+    
+  } else if prev_action_id == .action.attack && action_id != .action.attack && action_id != .action.charge {
+    delay(randy(3, 1, 0, 6, 0)); #NA DELAY (except if next action is NA/CA): mean 3 stddev 1, bounds: 0-6f
+    
+  } else if prev_action_id != .action.attack {
+    delay(randy(3, 1, 0, 6, 0)); #OTHER ACTION DELAY: mean 3 stddev 1, bounds: 0-6f
+  }
+
+  prev_char_id = char_id;
+  prev_action_id = action_id;
+  return _execute_action(char_id, action_id, p);
+}
+
+doActionList();
