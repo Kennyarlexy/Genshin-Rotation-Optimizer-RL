@@ -29,10 +29,10 @@ class Agent:
         return action
 
     def _predict(self, state: np.ndarray):    
-        state = tf.convert_to_tensor(state.reshape((1, -1)), dtype=tf.int32)
         prob_distribution, state_value = self.actor_critic(state)
 
         sampled_action_index = np.random.choice(self.n_actions, p=prob_distribution.numpy()[0])
+        print(prob_distribution[0])
         action = sampled_action_index + 1 # used in env.step()
 
         action_prob = prob_distribution[0, sampled_action_index]
@@ -41,11 +41,11 @@ class Agent:
         return action, action_prob, state_value, prob_distribution
 
     def learn(self, n_episodes=1000):
-        reward_end_of_episode = []
+        final_return_history = []
         for episode in range(1, n_episodes+1):
             print("episode", episode)
             
-            state = self.env.reset()
+            state = tf.expand_dims(tf.convert_to_tensor(self.env.reset(), dtype=tf.float32), axis=0)
             done = False
 
             # all of these are list of tensors
@@ -69,15 +69,15 @@ class Agent:
                     entropies.append(entropy)
                     rewards.append(reward)
 
-                    state = state_
-
-                reward_end_of_episode.append(reward.numpy())
+                    state = tf.expand_dims(tf.convert_to_tensor(state_, dtype=tf.float32), axis=0)
 
                 G_t = tf.constant(0.0, dtype=tf.float32)
                 for reward in reversed(rewards):
                     G_t = reward + self.gamma*G_t
                     discounted_returns.append(G_t)
-                
+                                
+                final_return_history.append(G_t)
+
                 discounted_returns = list(reversed(discounted_returns))
                 discounted_returns = tf.stack(discounted_returns)
 
@@ -94,6 +94,7 @@ class Agent:
                 total_critic_loss = tf.reduce_sum(tf.square(advantages)) # if full gradient descent
                 
                 total_loss = total_actor_loss + total_critic_loss
+                print(total_actor_loss, total_critic_loss)
 
             # compute and apply gradients
             grads_shared = tape.gradient(total_loss, self.actor_critic.shared_vars)
@@ -105,7 +106,7 @@ class Agent:
             self.optimizer_actor.apply_gradients(zip(grads_actor, self.actor_critic.actor_vars))
             self.optimizer_critic.apply_gradients(zip(grads_critic, self.actor_critic.critic_vars))
         
-        plot_time_series(reward_end_of_episode)
+        plot_time_series(final_return_history)
 
 
 if __name__ == "__main__":
