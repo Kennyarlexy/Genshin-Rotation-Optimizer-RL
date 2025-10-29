@@ -7,19 +7,51 @@ from tqdm import tqdm
 from custom_plot import plot_time_series
 
 class Agent:
-    def __init__(self, env: GcsimEnv, gamma=0.9, alpha=7e-4, entropy_coeff = 0.01, critic_loss_coeff = 0.5):
+    def __init__(self, env: GcsimEnv, gamma=1, alpha=6e-3, entropy_coeff = 0.01, critic_loss_coeff = 0.5, weights_h5_path = None, final_return_history_path = None):
         self.env = env
         self.gamma = tf.constant(gamma, dtype=tf.float32)
         self.alpha = tf.constant(alpha, dtype=tf.float32)
         self.entropy_coeff = tf.constant(entropy_coeff, dtype=tf.float32)
         self.critic_loss_coeff = tf.constant(critic_loss_coeff, dtype=tf.float32)
         
-        self.state_size = self.env.get_state_size()
+        self.state_dim = self.env.get_state_dim()
         self.n_actions = self.env.get_n_actions()
 
         self.actor_critic = ActorCritic(self.state_dim, self.n_actions)
 
         self.optimizer = keras.optimizers.Adam(learning_rate=alpha)
+
+        self.final_return_history = []
+
+    def load(self, weights_h5_path, final_return_history_path):
+        self._load_weights(weights_h5_path)
+        self._load_final_return_history(final_return_history_path)
+
+    def save(self, weights_h5_path, final_return_history_path):
+        self._save_weights(weights_h5_path)
+        self._save_final_return_history(final_return_history_path)
+
+    def _load_weights(self, weights_h5_path):
+        dummy_input = tf.zeros((1, self.state_dim))
+        self.actor_critic(dummy_input)
+        self.actor_critic.load_weights(weights_h5_path)
+        
+    def _save_weights(self, weight_h5_path):
+        self.actor_critic.save_weights(weight_h5_path)
+
+    def _load_final_return_history(self, final_return_history_path):
+        with open(final_return_history_path, 'r') as f:
+            for value in f:
+                value = float(value.strip())
+                tensor = tf.convert_to_tensor(value, dtype=tf.float32)
+                self.final_return_history.append(tensor)
+
+    def _save_final_return_history(self, final_return_history_path):
+        with open(final_return_history_path, 'w') as f:
+            for value in self.final_return_history:
+                value = value.numpy().item()
+                f.write(str(value) + "\n")
+    
     def predict(self, state):
         action, _, _ = self._predict(state)
         return action
@@ -37,7 +69,6 @@ class Agent:
         return action, action_prob, state_value, prob_distribution
 
     def learn(self, n_episodes=1000):
-        final_return_history = []
         for episode in range(1, n_episodes+1):
             print("episode", episode)
             
@@ -72,7 +103,7 @@ class Agent:
                     G_t = reward + self.gamma*G_t
                     discounted_returns.append(G_t)
                                 
-                final_return_history.append(G_t)
+                self.final_return_history.append(G_t)
 
                 discounted_returns = list(reversed(discounted_returns))
                 discounted_returns = tf.stack(discounted_returns)
@@ -82,12 +113,13 @@ class Agent:
                 # actor loss
                 actor_loss_terms = [-tf.stop_gradient(adv) * log_action_prob for log_action_prob, adv in zip(log_action_probs, advantages)]
                 entropy_bonus_terms = self.entropy_coeff * tf.stack(entropies)
-                total_actor_loss = tf.reduce_sum(actor_loss_terms) - tf.reduce_sum(entropy_bonus_terms)
+                total_actor_loss = tf.reduce_sum(actor_loss_terms) # - tf.reduce_sum(entropy_bonus_terms)
 
                 # critic loss
-                # critic_loss_terms = [-tf.stop_gradient(adv) * state_value for adv, state_value in zip(advantages, state_values)]
-                # total_critic_loss = self.critic_loss_coeff * tf.reduce_sum(critic_loss_terms)
-                total_critic_loss = tf.reduce_sum(tf.square(advantages)) # if full gradient descent
+                # critic_loss_terms = [tf.stop_gradient(adv) * state_value for adv, state_value in zip(advantages, state_values)]
+                # total_critic_loss = self.critic_loss_coeff * tf.reduce_sum(critic_loss_terms) * tf.constant(-1, dtype=tf.float32)
+                
+                total_critic_loss = self.critic_loss_coeff * tf.reduce_sum(tf.square(advantages))
                 
                 total_loss = total_actor_loss + total_critic_loss
                 print(total_actor_loss, total_critic_loss)
@@ -97,13 +129,18 @@ class Agent:
             del tape
             self.optimizer.apply_gradients(zip(grads, self.actor_critic.trainable_variables))
         
+        plot_time_series(self.final_return_history)
         
-        plot_time_series(final_return_history)
-
-
 if __name__ == "__main__":
+    WEIGHTS_H5_PATH = './actor_critic.weights.h5'
+    FINAL_RETURN_HISTORY_PATH = './final_return_history.txt'
+    
     env = GcsimEnv(debug=True, cd_penalty_factor=0.4, rps_reward_factor=0.05)
-    agent = Agent(env, gamma=0.9, entropy_coeff=0.02, critic_loss_coeff=0.5)
-    agent.learn(2000)        
+    agent = Agent(env, gamma=1, entropy_coeff=0.02, critic_loss_coeff=2, alpha=1e-3)
+    agent.load(WEIGHTS_H5_PATH, FINAL_RETURN_HISTORY_PATH)
+    print(agent.final_return_history)
+    
+    agent.learn(100)
+    agent.save(WEIGHTS_H5_PATH, FINAL_RETURN_HISTORY_PATH)
 
     env.close()
