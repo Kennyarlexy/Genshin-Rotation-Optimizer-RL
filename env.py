@@ -41,32 +41,25 @@ class GcsimEnv:
             dtype=np.int32
         )
         
-        self.max_episode_len = GcsimEnv.DEFAULT_EPISODE_LEN
+        self.max_step = GcsimEnv.DEFAULT_EPISODE_LEN
         self.state = np.zeros((GcsimEnv.DEFAULT_EPISODE_LEN,), dtype=np.int32)
-        self.move_count = 0
+        self.step_count = 0
         self.config_file = open(GcsimEnv.CONFIG_FILE_PATH, "r+")
         with open(GcsimEnv.CONFIG_HEADER_FILE_PATH, "r") as config_header_file:
             self.config_header_content = config_header_file.read()
         
         self.config_file_write_position = None
 
-        self.dps_normalizer = WelfordNormalizer()
-        self.cd_normalizer = WelfordNormalizer()
-        self.rps_normalizer = WelfordNormalizer()
+        self.reward_normalizer = WelfordNormalizer()
 
-
-    def reset(self, max_episode_len=None):
+    def reset(self, max_step=None):
         """
         Reset the environment to an initial state and return the initial observation.
         """
         self.episode_count += 1
         self._reset_config_file()
-        self.move_count = 0
-        if max_episode_len:
-            self.state = np.zeros((GcsimEnv.DEFAULT_EPISODE_LEN,), dtype=np.int32)
-            self.max_episode_len=max_episode_len
-        else:
-            self.state[:] = 0
+        self.step_count = 0
+        self.state[:] = 0
 
         return self.state
 
@@ -74,9 +67,9 @@ class GcsimEnv:
         """
         Execute one time step within the environment.
         """        
-        self.move_count += 1
-        self.state[self.move_count-1] = action
-        done = self.move_count == self.max_episode_len
+        self.step_count += 1
+        self.state[self.step_count-1] = action
+        done = self.step_count == self.max_step
 
         reward = 0
         self._update_config_file(action)
@@ -96,22 +89,20 @@ class GcsimEnv:
     def get_n_actions(self):
         return len(GcsimEnv.ACTION_TO_STRING)
     
-    def get_state_size(self):
+    def get_state_dim(self):
         return GcsimEnv.DEFAULT_EPISODE_LEN
     
     def _compute_reward(self, raw_dps: int, gcsim_out_file_path: str) -> float:
-        normalized_dps = self.dps_normalizer.transform(raw_dps)
+        raw_reward = raw_dps
+        normalized_reward = raw_reward / 10000
+
+        cd_duration, rps = self._analyze_gcsim_out(gcsim_out_file_path)
+        penalty = cd_duration / 100
         
-        cd_penalty, rps = self._analyze_gcsim_out(gcsim_out_file_path)
-        # print(cd_penalty, rps)
-        normalized_cd = self.cd_normalizer.transform(cd_penalty)
-        normalized_rps = self.rps_normalizer.transform(rps)
-        
-        return normalized_dps - self.penalty_factor * normalized_cd + self.rps_reward_factor * normalized_rps
-        # return normalized_dps - self.penalty_factor * cd_penalty + self.rps_reward_factor * rps
+        return normalized_reward - penalty
 
     def _analyze_gcsim_out(self, file_path: str) -> float:
-        penalty, rps = 0, 0
+        cd_duration, rps = 0, 0
         
         with open(file_path, "r") as gcsim_out:
             data = json.load(gcsim_out)
@@ -119,9 +110,9 @@ class GcsimEnv:
             
             failed_actions = data["statistics"]["failed_actions"]
             for failed_action in failed_actions:
-                penalty += failed_action["skill_cd"]["mean"]
+                cd_duration += failed_action["skill_cd"]["mean"]
         
-        return penalty, rps
+        return cd_duration, rps
 
     def _run_gcsim(self):
         try:
