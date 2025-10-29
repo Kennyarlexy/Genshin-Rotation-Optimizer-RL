@@ -1,6 +1,6 @@
+import tensorflow as tf
 import keras
 from keras import layers
-import numpy as np
 
 
 class ActorCritic(keras.Model):
@@ -10,66 +10,58 @@ class ActorCritic(keras.Model):
         self.action_size = n_actions
 
         # Shared layers
-        self.embedding = layers.Embedding(input_dim=n_actions+1, output_dim=8, input_length=state_size, name='action_embedding', mask_zero=True)
-        self.lstm_1    = layers.LSTM(48, name='lstm_feature_extractor_1')
-
-        self.concat = layers.Concatenate()
+        self.one_hot_layer = keras.layers.CategoryEncoding(
+            num_tokens=n_actions+1,
+            output_mode='one_hot'
+        )
+        self.flatten_layer = keras.layers.Flatten()
+        self.embedding = layers.Embedding(input_dim=n_actions+1, output_dim=3, name='action_embedding', mask_zero=True)
+        self.lstm_1    = layers.LSTM(16, return_sequences=True)
+        self.lstm_2    = layers.LSTM(64)
+        self.conv_1d   = layers.Conv1D(filters=4, kernel_size=3, activation='relu')
+        self.max_pooling = layers.MaxPooling1D(pool_size=2)
 
         # Actor layers
-        self.actor_hidden_1 = layers.Dense(128, activation='relu')
-        self.actor_hidden_2 = layers.Dense(48, activation='relu')
+        self.actor_hidden_1 = layers.Dense(32, activation='relu')
+        self.actor_hidden_2 = layers.Dense(32, activation='relu')
         self.actor_output = layers.Dense(n_actions, activation='softmax')
 
         # Critic layers
-        self.critic_hidden_1 = layers.Dense(64, activation='relu')
+        self.critic_hidden_1 = layers.Dense(32, activation='relu')
         self.critic_hidden_2 = layers.Dense(16, activation='relu')
         self.critic_output = layers.Dense(1, activation='linear')
 
     def call(self, inputs):
         action_seq = inputs
 
-        action_features = self.embedding(action_seq)
-        action_features = self.lstm_1(action_features)
-        # features = self.concat([action_features, cd_features])
-        features = action_features
+        # features = self.embedding(action_seq)
+        features = self.one_hot_layer(action_seq)
+        lstm_features = self.lstm_1(features)
+        lstm_features = self.lstm_2(lstm_features)
+        # features = self.conv_1d(features)
+        # features = self.max_pooling(features)
+        # features = self.lstm_1(features)
+
+        # features = self.one_hot_layer(action_seq)
+        features = self.flatten_layer(features)
+
 
         actor = self.actor_hidden_1(features)
         actor = self.actor_hidden_2(actor)
         actor = self.actor_output(actor)
 
-        critic = self.critic_hidden_1(features)
-        critic = self.critic_hidden_2(critic)
+        critic = self.critic_hidden_1(lstm_features)
+        # critic = self.critic_hidden_2(critic)
         critic = self.critic_output(critic)
 
         return actor, critic
-    
-    @property
-    def actor_vars(self):
-        return self.actor_hidden_1.trainable_variables + self.actor_output.trainable_variables
-
-    @property
-    def critic_vars(self):
-        return self.critic_hidden_1.trainable_variables + self.critic_output.trainable_variables
-
-    @property
-    def shared_vars(self):
-        return self.embedding.trainable_variables + self.lstm_1.trainable_variables
 
 # Example usage
 if __name__ == "__main__":
-    state_size = 30
-    action_size = 4
+    state_size = 20
+    action_size = 2
 
+    sample_input = tf.zeros((1, 20))
     model = ActorCritic(state_size, action_size)
-    action_seq = [1, 2, 3] + [0]*27
-    print(action_seq)
-
-    input_tensor = np.array(action_seq, dtype=np.int32).reshape((1, -1))
-    print(input_tensor)
-    policy, value = model.predict(input_tensor)        
-
-    print("Policy:", policy)
-    print("Value:", value)
-
-    print(type(policy), type(value))
+    model(sample_input)
     print(model.summary())

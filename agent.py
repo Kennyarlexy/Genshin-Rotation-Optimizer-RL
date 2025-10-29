@@ -16,14 +16,10 @@ class Agent:
         
         self.state_size = self.env.get_state_size()
         self.n_actions = self.env.get_n_actions()
-        self.actor_critic = ActorCritic(self.state_size, self.n_actions)
 
-        # self.cd_knowledge = np.array([], dtype=np.float32)
-        # self.cd_knowledge = tf.convert_to_tensor([self.cd_knowledge], dtype=tf.float32)
-        self.optimizer_shared = keras.optimizers.Adam(learning_rate=6e-4)
-        self.optimizer_actor  = keras.optimizers.Adam(learning_rate=6e-4)
-        self.optimizer_critic = keras.optimizers.Adam(learning_rate=1e-3)
+        self.actor_critic = ActorCritic(self.state_dim, self.n_actions)
 
+        self.optimizer = keras.optimizers.Adam(learning_rate=alpha)
     def predict(self, state):
         action, _, _ = self._predict(state)
         return action
@@ -45,7 +41,7 @@ class Agent:
         for episode in range(1, n_episodes+1):
             print("episode", episode)
             
-            state = tf.expand_dims(tf.convert_to_tensor(self.env.reset(), dtype=tf.float32), axis=0)
+            state = tf.expand_dims(tf.convert_to_tensor(self.env.reset(), dtype=tf.int32), axis=0)
             done = False
 
             # all of these are list of tensors
@@ -69,7 +65,7 @@ class Agent:
                     entropies.append(entropy)
                     rewards.append(reward)
 
-                    state = tf.expand_dims(tf.convert_to_tensor(state_, dtype=tf.float32), axis=0)
+                    state = tf.expand_dims(tf.convert_to_tensor(state_, dtype=tf.int32), axis=0)
 
                 G_t = tf.constant(0.0, dtype=tf.float32)
                 for reward in reversed(rewards):
@@ -97,14 +93,10 @@ class Agent:
                 print(total_actor_loss, total_critic_loss)
 
             # compute and apply gradients
-            grads_shared = tape.gradient(total_loss, self.actor_critic.shared_vars)
-            grads_actor  = tape.gradient(total_loss, self.actor_critic.actor_vars)
-            grads_critic = tape.gradient(total_loss, self.actor_critic.critic_vars)
+            grads = tape.gradient(total_loss, self.actor_critic.trainable_variables)
             del tape
-
-            self.optimizer_shared.apply_gradients(zip(grads_shared, self.actor_critic.shared_vars))
-            self.optimizer_actor.apply_gradients(zip(grads_actor, self.actor_critic.actor_vars))
-            self.optimizer_critic.apply_gradients(zip(grads_critic, self.actor_critic.critic_vars))
+            self.optimizer.apply_gradients(zip(grads, self.actor_critic.trainable_variables))
+        
         
         plot_time_series(final_return_history)
 
