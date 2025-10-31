@@ -129,7 +129,8 @@ class Agent:
             del tape
             self.optimizer.apply_gradients(zip(grads, self.actor_critic.trainable_variables))
         
-        plot_time_series(self.final_return_history)
+            if episode % 10 == 0:
+                plot_time_series(self.final_return_history)
         
 if __name__ == "__main__":
     WEIGHTS_H5_PATH = './actor_critic.weights.h5'
