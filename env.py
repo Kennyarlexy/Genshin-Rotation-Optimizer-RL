@@ -22,7 +22,7 @@ class GcsimEnv:
         3: "furina skill;",
         4: "kuki skill;",
     }
-    DEFAULT_EPISODE_LEN = 12
+    DEFAULT_EPISODE_LEN = 30
     
     def __init__(self, debug=False, debug_period=10, cd_penalty_factor=1, rps_reward_factor=1):
         self.debug = debug
@@ -31,18 +31,19 @@ class GcsimEnv:
         self.penalty_factor = cd_penalty_factor
         self.rps_reward_factor = rps_reward_factor
         
-        n_actions = self.get_n_actions()
+        self.n_actions = self.get_n_actions()
 
-        self.action_space = spaces.Discrete(n_actions)
+        self.action_space = spaces.Discrete(self.n_actions)
         self.observation_space = spaces.Box(
             low=0, 
-            high=n_actions,
-            shape=(GcsimEnv.DEFAULT_EPISODE_LEN,), 
+            high=self.n_actions + 1, # 0 for padding, 1 to n_actions for actual action, last is for the <start> token
+            shape=(GcsimEnv.DEFAULT_EPISODE_LEN + 1,), 
             dtype=np.int32
         )
         
         self.max_step = GcsimEnv.DEFAULT_EPISODE_LEN
-        self.state = np.zeros((GcsimEnv.DEFAULT_EPISODE_LEN,), dtype=np.int32)
+        self.state = np.zeros((GcsimEnv.DEFAULT_EPISODE_LEN + 1,), dtype=np.int32)
+        self.state[0] = self.n_actions + 1 # the <start> token
         self.step_count = 0
         self.config_file = open(GcsimEnv.CONFIG_FILE_PATH, "r+")
         with open(GcsimEnv.CONFIG_HEADER_FILE_PATH, "r") as config_header_file:
@@ -59,7 +60,7 @@ class GcsimEnv:
         self.episode_count += 1
         self._reset_config_file()
         self.step_count = 0
-        self.state[:] = 0
+        self.state[1:] = 0
 
         return self.state
 
@@ -68,7 +69,7 @@ class GcsimEnv:
         Execute one time step within the environment.
         """        
         self.step_count += 1
-        self.state[self.step_count-1] = action
+        self.state[self.step_count] = action
         done = self.step_count == self.max_step
 
         reward = 0
@@ -90,7 +91,7 @@ class GcsimEnv:
         return len(GcsimEnv.ACTION_TO_STRING)
     
     def get_state_dim(self):
-        return GcsimEnv.DEFAULT_EPISODE_LEN
+        return GcsimEnv.DEFAULT_EPISODE_LEN + 1
     
     def _compute_reward(self, raw_dps: int, gcsim_out_file_path: str) -> float:
         raw_reward = raw_dps
