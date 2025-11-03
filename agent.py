@@ -7,7 +7,7 @@ from tqdm import tqdm
 from custom_plot import plot_time_series
 
 class Agent:
-    def __init__(self, env: GcsimEnv, gamma=1, alpha=6e-3, entropy_coeff = 0.01, critic_loss_coeff = 0.5, weights_h5_path = None, final_return_history_path = None):
+    def __init__(self, env: GcsimEnv, gamma=1, alpha=6e-3, entropy_coeff=0.01, critic_loss_coeff=0.5):
         self.env = env
         self.gamma = tf.constant(gamma, dtype=tf.float32)
         self.alpha = tf.constant(alpha, dtype=tf.float32)
@@ -106,14 +106,13 @@ class Agent:
                 self.final_return_history.append(G_t)
 
                 discounted_returns = list(reversed(discounted_returns))
-                discounted_returns = tf.stack(discounted_returns)
 
-                advantages = discounted_returns - tf.stack(state_values)
+                advantages = tf.stack(discounted_returns) - tf.stack(state_values)
 
                 # actor loss
                 actor_loss_terms = [-tf.stop_gradient(adv) * log_action_prob for log_action_prob, adv in zip(log_action_probs, advantages)]
                 entropy_bonus_terms = self.entropy_coeff * tf.stack(entropies)
-                total_actor_loss = tf.reduce_sum(actor_loss_terms) # - tf.reduce_sum(entropy_bonus_terms)
+                total_actor_loss = tf.reduce_sum(actor_loss_terms) - tf.reduce_sum(entropy_bonus_terms)
 
                 # critic loss
                 # critic_loss_terms = [tf.stop_gradient(adv) * state_value for adv, state_value in zip(advantages, state_values)]
@@ -137,9 +136,8 @@ if __name__ == "__main__":
     FINAL_RETURN_HISTORY_PATH = './final_return_history.txt'
     
     env = GcsimEnv(debug=True, cd_penalty_factor=0.4, rps_reward_factor=0.05)
-    agent = Agent(env, gamma=1, entropy_coeff=0.02, critic_loss_coeff=2, alpha=1e-3)
+    agent = Agent(env, gamma=1, entropy_coeff=0, critic_loss_coeff=2, alpha=1e-3)
     agent.load(WEIGHTS_H5_PATH, FINAL_RETURN_HISTORY_PATH)
-    print(agent.final_return_history)
     
     agent.learn(100)
     agent.save(WEIGHTS_H5_PATH, FINAL_RETURN_HISTORY_PATH)
