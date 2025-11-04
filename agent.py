@@ -22,15 +22,6 @@ class Agent:
         self.optimizer = keras.optimizers.Adam(learning_rate=alpha)
 
         self.final_return_history = []
-        self.gamma_exp = self._precompute_gamma_exp()
-    
-    def _precompute_gamma_exp(self):
-        gamma_exp = []
-        gamma_exp.append(tf.constant(1, dtype=tf.float32))
-        for exp in range(1, self.n_step):
-            gamma_exp.append(self.gamma * gamma_exp[-1])
-
-        return gamma_exp
 
     def load(self, weights_h5_path, final_return_history_path):
         self._load_weights(weights_h5_path)
@@ -62,7 +53,7 @@ class Agent:
                 f.write(str(value) + "\n")
     
     def predict(self, state):
-        action, _, _ = self._predict(state)
+        action, _, _, _ = self._predict(state)
         return action
 
     def _predict(self, state: np.ndarray):    
@@ -149,7 +140,7 @@ if __name__ == "__main__":
     FINAL_RETURN_HISTORY_PATH = './final_return_history.txt'
     
     env = GcsimEnv(debug=True, cd_penalty_factor=0.4, rps_reward_factor=0.05)
-    agent = Agent(env, gamma=1, entropy_coeff=0.005, critic_loss_coeff=2, alpha=7e-4, n_step=20)
+    agent = Agent(env, gamma=1, entropy_coeff=0, critic_loss_coeff=2, alpha=7e-4, n_step=30)
     # agent.load(WEIGHTS_H5_PATH, FINAL_RETURN_HISTORY_PATH)
     
     agent.learn(200)
