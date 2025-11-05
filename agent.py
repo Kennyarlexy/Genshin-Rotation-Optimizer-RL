@@ -21,7 +21,7 @@ class Agent:
         self.actor_critic = ActorCritic(self.state_dim, self.n_actions)
         self.optimizer = keras.optimizers.Adam(learning_rate=alpha)
 
-        self.final_return_history = []
+        self.cumulative_reward_history = []
 
     def load(self, weights_h5_path, final_return_history_path):
         self._load_weights(weights_h5_path)
@@ -43,13 +43,12 @@ class Agent:
         with open(final_return_history_path, 'r') as f:
             for value in f:
                 value = float(value.strip())
-                tensor = tf.convert_to_tensor(value, dtype=tf.float32)
-                self.final_return_history.append(tensor)
+                self.cumulative_reward_history.append(value)
 
     def _save_final_return_history(self, final_return_history_path):
         with open(final_return_history_path, 'w') as f:
-            for value in self.final_return_history:
-                value = value.numpy().item()
+            for value in self.cumulative_reward_history:
+                value = value
                 f.write(str(value) + "\n")
     
     def predict(self, state):
@@ -74,66 +73,66 @@ class Agent:
             state = tf.expand_dims(tf.convert_to_tensor(self.env.reset(), dtype=tf.int32), axis=0)
             done = False
 
-            # all of these are list of tensors
-            state_values = []
-            log_action_probs = []
-            entropies = []
+            states = []
             rewards = []
+            actions = []
+            cumulative_reward = 0 # sum of raw rewards from beginning to end of episode
             
             T = 1000000000
             t1 = 0 # point to current interaction
             t2 = t1 - self.n_step + 1 # point to first reward of the cumulative return
-            with tf.GradientTape(persistent=True) as tape:
-                while t2 < T:
-                    t2 += 1
-                    if not done:
-                        t1 += 1
-                        action, action_prob, state_value, prob_distribution = self._predict(state)
-                        print(prob_distribution[0])
-                        
-                        state_, reward, done = self.env.step(action)
+            while t2 < T:
+                t2 += 1
+                if not done:
+                    t1 += 1
+                    action, _, _, _ = self._predict(state)
+                    
+                    state_, reward, done = self.env.step(action)
+                    cumulative_reward += reward
+                    reward = tf.convert_to_tensor(reward, dtype=tf.float32)
+                    actions.append(action) 
+                    rewards.append(reward)
+                    states.append(state)
+
+                    state = tf.expand_dims(tf.convert_to_tensor(state_, dtype=tf.int32), axis=0)
+                
+                if done:
+                    T = t1
+
+                if t2 >= 1:
+                    with tf.GradientTape() as tape:
+                        _, _, state_value, prob_distribution = self._predict(states[t2-1])
+                        if episode % 2 == 0:
+                            print(prob_distribution[0])
+                        else:
+                            print(state_value)
+
+                        action_prob = prob_distribution[0, actions[t2-1]-1]
                         log_action_prob = tf.math.log(action_prob)
                         entropy = -tf.reduce_sum(prob_distribution * tf.math.log(prob_distribution + 1e-10))
-                        reward  =  tf.convert_to_tensor(reward, dtype=tf.float32)
-
-                        state_values.append(state_value)
-                        log_action_probs.append(log_action_prob)
-                        entropies.append(entropy)
-                        rewards.append(reward)
-
-                        state = tf.expand_dims(tf.convert_to_tensor(state_, dtype=tf.int32), axis=0)
-                    
-                    if done:
-                        T = t1
-
-                    if t2 >= 1:
+                        
                         t3 = min(T, t2 + self.n_step - 1) # point to last reward of the cumulative return
                         G_t = tf.constant(0, dtype=tf.float32)
                         if (t2 + self.n_step - 1 < T):
-                            _, _, state_value_, _ = self._predict(state)
+                            _, _, state_value_, _ = self._predict(states[(t2 + self.n_step - 1) - 1])
                             G_t = state_value_
                         
                         for t in range(t3, t2-1, -1):
                             G_t = rewards[t-1] + self.gamma * G_t
 
-                        advantage = G_t - state_values[t2-1]
+                        advantage = G_t - state_value
 
-                        actor_loss  = -1 * tf.stop_gradient(advantage) * log_action_probs[t2-1]
-                        critic_loss = -1 * tf.stop_gradient(advantage) * state_values[t2-1]
-                        # print(actor_loss, critic_loss)
-                        total_loss = actor_loss + self.critic_loss_coeff * critic_loss + self.entropy_coeff * entropy
-                            
-                        # compute and apply gradients
-                        with tape.stop_recording():
-                            grads = tape.gradient(total_loss, self.actor_critic.trainable_variables)
+                        actor_loss  = -1 * tf.stop_gradient(advantage) * log_action_prob
+                        critic_loss = -1 * tf.stop_gradient(advantage) * state_value
+                        total_loss = actor_loss + self.critic_loss_coeff * critic_loss - self.entropy_coeff * entropy
 
-                        self.optimizer.apply_gradients(zip(grads, self.actor_critic.trainable_variables))
+                    grads = tape.gradient(total_loss, self.actor_critic.trainable_variables)
+                    self.optimizer.apply_gradients(zip(grads, self.actor_critic.trainable_variables))
                     
-            del tape
-            self.final_return_history.append(G_t)
+            self.cumulative_reward_history.append(cumulative_reward)
         
             if episode % 10 == 0:
-                plot_time_series(self.final_return_history)
+                plot_time_series(self.cumulative_reward_history)
         
 if __name__ == "__main__":
     WEIGHTS_H5_PATH = './actor_critic.weights.h5'
