@@ -16,15 +16,11 @@ class GcsimEnv:
     CONFIG_HEADER_FILE_PATH = "config_header.txt"
     GCSIM_OUT_FILE_PATH = "gcsim_out.json"
 
-    ACTION_TO_STRING = {
-        1: "alhaitham attack;",
-        2: "alhaitham skill;",
-        3: "furina skill;",
-        4: "kuki skill;",
-    }
     DEFAULT_EPISODE_LEN = 30
     
-    def __init__(self, debug=False, debug_period=10, cd_penalty_factor=1, rps_reward_factor=1):
+    def __init__(self, action_mapping: dict, debug: bool=False, debug_period: int=10, cd_penalty_factor: float=1.0, rps_reward_factor: float=1.0) -> None:
+        self.action_mapping = action_mapping
+        
         self.debug = debug
         self.debug_period=debug_period
         self.episode_count = 0
@@ -36,7 +32,7 @@ class GcsimEnv:
         self.action_space = spaces.Discrete(self.n_actions)
         self.observation_space = spaces.Box(
             low=0, 
-            high=self.n_actions + 1, # 0 for padding, 1 to n_actions for actual action, last is for the <start> token
+            high=self.n_actions + 2, # 0 for padding, 1 to n_actions for actual action, last is for the <start> token
             shape=(GcsimEnv.DEFAULT_EPISODE_LEN + 1,), 
             dtype=np.int32
         )
@@ -53,7 +49,7 @@ class GcsimEnv:
 
         self.reward_normalizer = WelfordNormalizer()
 
-    def reset(self, max_step=None):
+    def reset(self) -> np.ndarray:
         """
         Reset the environment to an initial state and return the initial observation.
         """
@@ -64,7 +60,7 @@ class GcsimEnv:
 
         return self.state
 
-    def step(self, action: int):
+    def step(self, action: int) -> tuple[np.ndarray, float, bool]:
         """
         Execute one time step within the environment.
         """        
@@ -72,7 +68,7 @@ class GcsimEnv:
         self.state[self.step_count] = action
         done = self.step_count == self.max_step
 
-        reward = 0
+        reward = 0.0
         self._update_config_file(action)
         if done:
             raw_dps = self._run_gcsim()
@@ -80,17 +76,17 @@ class GcsimEnv:
         
         return self.state, reward, done
 
-    def close(self):
+    def close(self) -> None:
         """
         Clean up resources when the environment is closed.
         """
         if self.config_file:
             self.config_file.close()
 
-    def get_n_actions(self):
-        return len(GcsimEnv.ACTION_TO_STRING)
+    def get_n_actions(self) -> int:
+        return len(self.action_mapping)
     
-    def get_state_dim(self):
+    def get_state_dim(self) -> int:
         return GcsimEnv.DEFAULT_EPISODE_LEN + 1
     
     def _compute_reward(self, raw_dps: int, gcsim_out_file_path: str) -> float:
@@ -115,7 +111,7 @@ class GcsimEnv:
         
         return cd_duration, rps
 
-    def _run_gcsim(self):
+    def _run_gcsim(self) -> float:
         try:
             result = subprocess.run([GcsimEnv.GCSIM_PATH, '-out', GcsimEnv.GCSIM_OUT_FILE_PATH], check=True, capture_output=True, text=True)
             output = result.stdout
@@ -131,12 +127,12 @@ class GcsimEnv:
             print(f"Error: {e.stderr}")
             print(f"An unexpected error occurred: {e}")
 
-    def _update_config_file(self, action: int):
+    def _update_config_file(self, action: int) -> None:
         self.config_file.seek(0, 2)
-        self.config_file.write(self.ACTION_TO_STRING[action])
+        self.config_file.write(self.action_mapping[action])
         self.config_file.flush()
 
-    def _reset_config_file(self):
+    def _reset_config_file(self) -> None:
         if self.config_file_write_position is None:
             self.config_file.seek(0)
             self.config_file.write(self.config_header_content)
@@ -147,10 +143,17 @@ class GcsimEnv:
 
 
 if __name__ == "__main__":
-    env = GcsimEnv()
+    action_mapping = {
+        1: "alhaitham attack;",
+        2: "alhaitham skill;",
+        3: "furina skill;",
+        4: "kuki skill;",
+    }
+    
+    env = GcsimEnv(action_mapping)
 
-    obs = env.reset()
-    obs_, reward, done = env.step(4)
+    state = env.reset()
+    state_, reward, done = env.step(4)
     print(reward)
     
     env.close()

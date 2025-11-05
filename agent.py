@@ -137,12 +137,19 @@ class Agent:
 if __name__ == "__main__":
     WEIGHTS_H5_PATH = './actor_critic.weights.h5'
     FINAL_RETURN_HISTORY_PATH = './final_return_history.txt'
+
+    action_mapping = {
+        1: "alhaitham attack;",
+        2: "alhaitham skill;",
+        3: "furina skill;",
+        4: "kuki skill;",
+    }
     
-    env = GcsimEnv(debug=True, cd_penalty_factor=0.4, rps_reward_factor=0.05)
-    agent = Agent(env, gamma=1, entropy_coeff=0, critic_loss_coeff=2, alpha=7e-4, n_step=30)
+    env = GcsimEnv(action_mapping, debug=True, cd_penalty_factor=0.4, rps_reward_factor=0.05)
+    agent = Agent(env, gamma=1, entropy_coeff=0, critic_loss_coeff=2, alpha=3e-4, n_step=30)
     # agent.load(WEIGHTS_H5_PATH, FINAL_RETURN_HISTORY_PATH)
     
-    agent.learn(200)
+    agent.learn(50)
     agent.save(WEIGHTS_H5_PATH, FINAL_RETURN_HISTORY_PATH)
 
     env.close()
