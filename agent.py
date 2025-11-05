@@ -2,7 +2,7 @@ import tensorflow as tf
 import keras
 import numpy as np
 from actor_critic import ActorCritic
-from env import GcsimEnv
+from env import GcsimEnv, GcsimV1
 from tqdm import tqdm
 from custom_plot import plot_time_series
 
@@ -145,11 +145,11 @@ if __name__ == "__main__":
         4: "kuki skill;",
     }
     
-    env = GcsimEnv(action_mapping, debug=True, cd_penalty_factor=0.4, rps_reward_factor=0.05)
+    env = GcsimV1(action_mapping, debug=True)
     agent = Agent(env, gamma=1, entropy_coeff=0, critic_loss_coeff=2, alpha=3e-4, n_step=30)
-    # agent.load(WEIGHTS_H5_PATH, FINAL_RETURN_HISTORY_PATH)
+    agent.load(WEIGHTS_H5_PATH, FINAL_RETURN_HISTORY_PATH)
     
-    agent.learn(50)
+    agent.learn(200)
     agent.save(WEIGHTS_H5_PATH, FINAL_RETURN_HISTORY_PATH)
 
     env.close()

@@ -81,7 +81,6 @@ class ActorCritic(keras.Model):
         actor = self.actor_output(actor)
 
         critic = self.critic_hidden_1(features)
-        # critic = self.critic_hidden_2(critic)
         critic = self.critic_output(critic)
 
         return actor, critic
