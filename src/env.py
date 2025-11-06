@@ -15,8 +15,11 @@ class GcsimEnv:
     A custom environment following the Gymnasium interface.
     """
     GCSIM_PATH = PROJECT_ROOT / "bin" / "gcsim.exe"
+    GCSIM_OUT_FILE_PATH = PROJECT_ROOT / "gcsim_output" / "gcsim_out.json"
+    CONFIG_FILE_PATH = PROJECT_ROOT / "gcsim_config" / "config.txt"
+    CONFIG_HEADER_FILE_PATH = PROJECT_ROOT / "gcsim_config" / "config_header.txt"
     
-    def __init__(self, config_file_path: Path, config_header_file_path: Path, gcsim_out_file_path: Path, action_mapping: dict, debug: bool=False, debug_period: int=10) -> None:
+    def __init__(self, action_mapping: dict, debug: bool=False, debug_period: int=10) -> None:
         self.debug = debug
         self.debug_period = debug_period
 
@@ -24,10 +27,8 @@ class GcsimEnv:
         self.episode_count = 0
         self.n_actions = self.get_n_actions()
         
-        self.config_file_path = config_file_path
-        self.gcsim_out_file_path = gcsim_out_file_path
-        self.config_file = open(config_file_path, "r+")
-        with open(config_header_file_path, "r") as config_header_file:
+        self.config_file = open(self.CONFIG_FILE_PATH, "r+")
+        with open(self.CONFIG_HEADER_FILE_PATH, "r") as config_header_file:
             self.config_header_content = config_header_file.read()
         
         self.config_file_write_position = None
@@ -81,7 +82,7 @@ class GcsimEnv:
         """
         
         try:
-            result = subprocess.run([self.GCSIM_PATH, '-c', self.config_file_path, '-out', self.gcsim_out_file_path], check=True, capture_output=True, text=True)
+            result = subprocess.run([self.GCSIM_PATH, '-c', self.CONFIG_FILE_PATH, '-out', self.GCSIM_OUT_FILE_PATH], check=True, capture_output=True, text=True)
             output = result.stdout
 
             match_dmg = re.search(r"Average (\d+\.\d+) damage", output)
@@ -122,12 +123,8 @@ class GcsimV1(GcsimEnv):
     GcsimEnv with fixed number of steps per episode
     """
 
-    GCSIM_OUT_FILE_PATH = PROJECT_ROOT / "gcsim_output" / "gcsimv1" / "gcsim_out.json"
-    CONFIG_FILE_PATH = PROJECT_ROOT / "gcsim_config" / "gcsimv1" / "config.txt"
-    CONFIG_HEADER_FILE_PATH = PROJECT_ROOT / "gcsim_config" / "gcsimv1" / "config_header.txt"
-
     def __init__(self, action_mapping: dict, steps_per_episode=30, debug: bool=False, debug_period: int=10):
-        super().__init__(self.CONFIG_FILE_PATH, self.CONFIG_HEADER_FILE_PATH, self.GCSIM_OUT_FILE_PATH, action_mapping, debug, debug_period)
+        super().__init__(action_mapping, debug, debug_period)
 
         self.steps_per_episode = steps_per_episode
         self.state = np.zeros((self.steps_per_episode + 1,), dtype=np.int32)
