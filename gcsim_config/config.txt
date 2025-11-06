@@ -26,4 +26,4 @@ kuki add stats def%=0.131 def=76 hp=6483 hp%=0.35 atk=329 atk%=0.047 er=0.278 em
 options iteration=10 swap_delay=14;
 target lvl=100 type=dummy particle_threshold=520000 particle_drop_count=3;
 
-active nahida;alhaitham skill;alhaitham skill;kuki skill;alhaitham attack;kuki skill;alhaitham attack;kuki skill;alhaitham skill;alhaitham attack;furina skill;alhaitham attack;alhaitham skill;alhaitham skill;alhaitham attack;alhaitham attack;alhaitham skill;alhaitham skill;kuki skill;kuki skill;furina skill;alhaitham attack;kuki skill;alhaitham skill;alhaitham skill;alhaitham attack;alhaitham attack;alhaitham attack;alhaitham attack;alhaitham skill;furina skill;
+active nahida;kuki skill;alhaitham skill;alhaitham skill;alhaitham attack;furina skill;furina skill;kuki skill;kuki skill;alhaitham skill;furina skill;kuki skill;kuki skill;alhaitham skill;alhaitham attack;alhaitham attack;furina skill;alhaitham skill;furina skill;kuki skill;alhaitham skill;alhaitham skill;alhaitham attack;furina skill;alhaitham skill;alhaitham attack;kuki skill;alhaitham skill;kuki skill;alhaitham skill;furina skill;
