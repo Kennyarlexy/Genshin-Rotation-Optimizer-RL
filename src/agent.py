@@ -1,13 +1,17 @@
 import tensorflow as tf
 import keras
 import numpy as np
+from pathlib import Path
 from actor_critic import ActorCritic
 from env import GcsimEnv, GcsimV1
 from tqdm import tqdm
 from custom_plot import plot_time_series
 
+SCRIPT_PATH = Path(__file__)
+PROJECT_ROOT = SCRIPT_PATH.parent.parent
+
 class Agent:
-    def __init__(self, env: GcsimEnv, gamma=1, alpha=6e-3, n_step = 1, entropy_coeff=0.01, critic_loss_coeff=0.5):
+    def __init__(self, env: GcsimEnv, gamma=1.0, alpha=6e-3, n_step = 1, entropy_coeff=0.01, critic_loss_coeff=0.5):
         self.env = env
         self.gamma = tf.constant(gamma, dtype=tf.float32)
         self.alpha = tf.constant(alpha, dtype=tf.float32)
@@ -57,12 +61,13 @@ class Agent:
 
     def _predict(self, state: np.ndarray):    
         prob_distribution, state_value = self.actor_critic(state)
+        prob_distribution = tf.squeeze(prob_distribution)
+        state_value = tf.squeeze(state_value)
 
-        sampled_action_index = np.random.choice(self.n_actions, p=prob_distribution.numpy()[0])
+        sampled_action_index = np.random.choice(self.n_actions, p=prob_distribution.numpy())
         action = sampled_action_index + 1 # used in env.step()
 
-        action_prob = prob_distribution[0, sampled_action_index]
-        state_value = state_value[0, 0]
+        action_prob = prob_distribution[sampled_action_index]
 
         return action, action_prob, state_value, prob_distribution
 
@@ -89,7 +94,6 @@ class Agent:
                     
                     state_, reward, done = self.env.step(action)
                     cumulative_reward += reward
-                    reward = tf.convert_to_tensor(reward, dtype=tf.float32)
                     actions.append(action) 
                     rewards.append(reward)
                     states.append(state)
@@ -103,13 +107,13 @@ class Agent:
                     with tf.GradientTape() as tape:
                         _, _, state_value, prob_distribution = self._predict(states[t2-1])
                         if episode % 2 == 0:
-                            print(prob_distribution[0])
+                            print(prob_distribution)
                         else:
                             print(state_value)
 
-                        action_prob = prob_distribution[0, actions[t2-1]-1]
+                        action_prob = prob_distribution[actions[t2-1]-1]
                         log_action_prob = tf.math.log(action_prob)
-                        entropy = -tf.reduce_sum(prob_distribution * tf.math.log(prob_distribution + 1e-10))
+                        entropy = -1 * tf.reduce_sum(prob_distribution * tf.math.log(prob_distribution + 1e-10)) * self.entropy_coeff
                         
                         t3 = min(T, t2 + self.n_step - 1) # point to last reward of the cumulative return
                         G_t = tf.constant(0, dtype=tf.float32)
@@ -122,12 +126,22 @@ class Agent:
 
                         advantage = G_t - state_value
 
-                        actor_loss  = -1 * tf.stop_gradient(advantage) * log_action_prob
-                        critic_loss = -1 * tf.stop_gradient(advantage) * state_value
-                        total_loss = actor_loss + self.critic_loss_coeff * critic_loss - self.entropy_coeff * entropy
+                        actor_loss  = -1 * tf.stop_gradient(advantage) * log_action_prob 
+                        critic_loss = -1 * tf.stop_gradient(advantage) * state_value * self.critic_loss_coeff
+                        total_loss = actor_loss + critic_loss - entropy
+
+                    # print("actor_loss=", actor_loss)
+                    # print("critic_loss =", critic_loss)
+                    # print("before =", state_value)
 
                     grads = tape.gradient(total_loss, self.actor_critic.trainable_variables)
                     self.optimizer.apply_gradients(zip(grads, self.actor_critic.trainable_variables))
+
+                    # _, _, state_value_x, _ = self._predict(states[t2-1])
+                    # print("after =", state_value_x)
+                    # print("target =", G_t)
+                    # print("difference =", state_value_x - state_value)
+                    # print("------------------------------------")
                     
             self.cumulative_reward_history.append(cumulative_reward)
         
@@ -135,8 +149,8 @@ class Agent:
                 plot_time_series(self.cumulative_reward_history)
         
 if __name__ == "__main__":
-    WEIGHTS_H5_PATH = './actor_critic.weights.h5'
-    FINAL_RETURN_HISTORY_PATH = './final_return_history.txt'
+    WEIGHTS_H5_PATH = PROJECT_ROOT / 'models' / 'actor_critic.weights.h5'
+    FINAL_RETURN_HISTORY_PATH = PROJECT_ROOT / 'var' / 'final_return_history.txt'
 
     action_mapping = {
         1: "alhaitham attack;",
@@ -146,10 +160,10 @@ if __name__ == "__main__":
     }
     
     env = GcsimV1(action_mapping, debug=True)
-    agent = Agent(env, gamma=1, entropy_coeff=0, critic_loss_coeff=2, alpha=3e-4, n_step=30)
+    agent = Agent(env, gamma=1.0, entropy_coeff=0.0, critic_loss_coeff=50, alpha=1e-4, n_step=30)
     agent.load(WEIGHTS_H5_PATH, FINAL_RETURN_HISTORY_PATH)
     
-    agent.learn(200)
+    agent.learn(1)
     agent.save(WEIGHTS_H5_PATH, FINAL_RETURN_HISTORY_PATH)
 
     env.close()
