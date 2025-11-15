@@ -7,7 +7,7 @@ from keras import layers
 class ActorCritic(keras.Model):
     def __init__(self, state_size, n_actions):
         super().__init__()
-        self.state_size  = state_size
+        self.state_dim  = state_size
         self.action_size = n_actions
 
         # Shared layers
@@ -36,6 +36,9 @@ class ActorCritic(keras.Model):
         self.critic_hidden_2 = layers.Dense(32, activation='relu')
         self.critic_output   = layers.Dense(1, activation='linear')
 
+        self.build(input_shape=(None, self.state_dim))
+
+    @tf.function
     def call(self, inputs):
         # return self._call_ver_1(inputs)
         # return self._call_ver_2(inputs)
@@ -89,7 +92,7 @@ class ActorCritic(keras.Model):
         one_hot_features = self.one_hot_layer_2(inputs)
 
         zeros_cnt = tf.reduce_sum(tf.cast(inputs == 0, tf.int32))
-        is_start_neuron = tf.constant([[int(zeros_cnt == self.state_size - 1)]], dtype=tf.float32)
+        is_start_neuron = tf.constant([[int(zeros_cnt == self.state_dim - 1)]], dtype=tf.float32)
 
         actor_input = one_hot_features[:, 1:, :-1]
         actor = self.flatten_layer(actor_input)
