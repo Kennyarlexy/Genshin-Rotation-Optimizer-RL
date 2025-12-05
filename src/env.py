@@ -19,7 +19,21 @@ class GcsimEnv:
     CONFIG_FILE_PATH = PROJECT_ROOT / "gcsim_config" / "config.txt"
     CONFIG_HEADER_FILE_PATH = PROJECT_ROOT / "gcsim_config" / "config_header.txt"
     
-    def __init__(self, action_mapping: dict, debug: bool=False, debug_period: int=10) -> None:
+    
+    DEFAULT_OPTIONS = {
+        "iteration": 10,
+        "swap_delay": 14,
+    }
+
+    DEFAULT_TARGET = {
+        "lvl": 100,
+        "type": "dummy",
+        "resist": 0.1,
+        "particle_threshold": 520000,
+        "particle_drop_count": 3,
+    }
+    
+    def __init__(self, action_mapping: dict, debug: bool=False, debug_period: int=10, options: dict | None=None, target: dict | None=None) -> None:
         self.debug = debug
         self.debug_period = debug_period
 
@@ -31,6 +45,8 @@ class GcsimEnv:
         with open(self.CONFIG_HEADER_FILE_PATH, "r") as config_header_file:
             self.config_header_content = config_header_file.read()
         
+        self.options = options or self.DEFAULT_OPTIONS
+        self.enemy = target or self.DEFAULT_TARGET
         self.config_file_write_position = None
 
     @abstractmethod
@@ -111,11 +127,21 @@ class GcsimEnv:
     def _reset_config_file(self) -> None:
         if self.config_file_write_position is None:
             self.config_file.seek(0)
-            self.config_file.write(self.config_header_content)
+            options = self._stringify_parameters(self.options, "options")
+            target  = self._stringify_parameters(self.enemy, "target")
+            self.config_file.write(self.config_header_content + options + target)
             self.config_file_write_position = self.config_file.tell()
             
         self.config_file.seek(self.config_file_write_position)
         self.config_file.truncate()
+
+    def _stringify_parameters(self, params: dict, name: str) -> str:
+        result = name
+        for k, v in params.items():
+            result += (" " + k + "=" + str(v))
+        
+        result += ";\n"
+        return result
 
 
 class GcsimV1(GcsimEnv):
@@ -123,8 +149,8 @@ class GcsimV1(GcsimEnv):
     GcsimEnv with fixed number of steps per episode
     """
 
-    def __init__(self, action_mapping: dict, steps_per_episode=30, debug: bool=False, debug_period: int=10):
-        super().__init__(action_mapping, debug, debug_period)
+    def __init__(self, action_mapping: dict, steps_per_episode=30, debug: bool=False, debug_period: int=10, options: dict | None=None, target: dict | None=None):
+        super().__init__(action_mapping, debug, debug_period, options, target)
 
         self.steps_per_episode = steps_per_episode
         self.state = np.zeros((self.steps_per_episode + 1,), dtype=np.int32)
