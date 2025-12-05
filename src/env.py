@@ -186,42 +186,42 @@ class GcsimV1(GcsimEnv):
         return self.state, reward, done
 
 
-class GcsimV2(GcsimEnv):
-    """
-    GcsimEnv with fixed duration in seconds
-    """
+# class GcsimV2(GcsimEnv):
+#     """
+#     GcsimEnv with fixed duration in seconds
+#     """
     
-    def __init__(self, action_mapping: dict, duration: float=30, debug: bool=False, debug_period: int=10):
-        super().__init__(action_mapping, debug, debug_period)
+#     def __init__(self, action_mapping: dict, duration: float=30, debug: bool=False, debug_period: int=10):
+#         super().__init__(action_mapping, debug, debug_period)
         
-        self.duration = duration
-        self.state = np.zeros((150,), dtype=np.int32)
-        self.state[0] = self.n_actions + 1 # the <start> token
-        self.step_count = 0
+#         self.duration = duration
+#         self.state = np.zeros((150,), dtype=np.int32)
+#         self.state[0] = self.n_actions + 1 # the <start> token
+#         self.step_count = 0
 
-    @override
-    def reset(self) -> np.ndarray:
-        super().reset()
+#     @override
+#     def reset(self) -> np.ndarray:
+#         super().reset()
 
-        self.step_count = 0
-        self.state[1:] = 0
+#         self.step_count = 0
+#         self.state[1:] = 0
 
-        return self.state
+#         return self.state
         
-    @override
-    def step(self, action: int) -> tuple[np.ndarray, float, bool]:
-        super().step(action)
+#     @override
+#     def step(self, action: int) -> tuple[np.ndarray, float, bool]:
+#         super().step(action)
 
-        dmg, duration, _ = self._run_gcsim()
+#         dmg, duration, _ = self._run_gcsim()
         
-        self.step_count += 1
-        self.state[self.step_count] = action
-        done = duration == self.duration
+#         self.step_count += 1
+#         self.state[self.step_count] = action
+#         done = duration == self.duration
 
-        reward = 0.0
-        self._update_config_file(action)
+#         reward = 0.0
+#         self._update_config_file(action)
         
-        return self.state, reward, done
+#         return self.state, reward, done
 
 if __name__ == "__main__":
     action_mapping = {
