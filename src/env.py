@@ -136,12 +136,10 @@ class GcsimEnv:
         self.config_file.truncate()
 
     def _stringify_parameters(self, params: dict, name: str) -> str:
-        result = name
-        for k, v in params.items():
-            result += (" " + k + "=" + str(v))
+        parts = [f"{k}={v}" for k, v in params.items()]
+        joined_params = " ".join(parts)
         
-        result += ";\n"
-        return result
+        return f"{name} {joined_params};\n"
 
 
 class GcsimV1(GcsimEnv):
