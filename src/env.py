@@ -79,10 +79,10 @@ class GcsimEnv:
     def get_state_dim(self) -> int:
         pass
 
-    def _analyze_gcsim_out(self, file_path: str) -> float:
+    def _analyze_gcsim_out(self) -> float:
         cd_duration, rps = 0, 0
         
-        with open(file_path, "r") as gcsim_out:
+        with open(self.GCSIM_OUT_FILE_PATH, "r") as gcsim_out:
             data = json.load(gcsim_out)
             rps = data["statistics"]["rps"]["mean"]
             
@@ -178,15 +178,15 @@ class GcsimV1(GcsimEnv):
         self._update_config_file(action)
         if done:
             raw_dps = self._run_gcsim()
-            reward = self._compute_reward(raw_dps, self.GCSIM_OUT_FILE_PATH)
+            reward = self._compute_reward(raw_dps)
         
         return self.state, reward, done
     
-    def _compute_reward(self, dps: float, gcsim_out_file_path: str) -> float:
+    def _compute_reward(self, dps: float) -> float:
         raw_reward = dps
         normalized_reward = raw_reward / 10000
 
-        cd_duration, rps = self._analyze_gcsim_out(gcsim_out_file_path)
+        cd_duration, rps = self._analyze_gcsim_out()
         penalty = cd_duration / 100
         
         return normalized_reward - penalty
@@ -197,8 +197,6 @@ class GcsimV1(GcsimEnv):
     
     @override
     def step(self, action: int) -> tuple[np.ndarray, float, bool]:
-        super().step(action)
-        
         self.step_count += 1
         self.state[self.step_count] = action
         done = self.step_count == self.steps_per_episode
@@ -207,7 +205,7 @@ class GcsimV1(GcsimEnv):
         self._update_config_file(action)
         if done:
             _, _, dps = self._run_gcsim()
-            reward = self._compute_reward(dps, self.GCSIM_OUT_FILE_PATH)
+            reward = self._compute_reward(dps)
         
         return self.state, reward, done
 
