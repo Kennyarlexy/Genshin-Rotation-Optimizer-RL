@@ -16,6 +16,7 @@ class GcsimEnv:
     """
     GCSIM_PATH = PROJECT_ROOT / "bin" / "gcsim.exe"
     GCSIM_OUT_FILE_PATH = PROJECT_ROOT / "gcsim_output" / "gcsim_out.json"
+    GCSIM_SAMPLE_FILE_PATH = PROJECT_ROOT / "gcsim_output" / "gcsim_sample.json"
     CONFIG_FILE_PATH = PROJECT_ROOT / "gcsim_config" / "config.txt"
     CONFIG_HEADER_FILE_PATH = PROJECT_ROOT / "gcsim_config" / "config_header.txt"
     
@@ -32,6 +33,8 @@ class GcsimEnv:
         "particle_threshold": 520000,
         "particle_drop_count": 3,
     }
+
+    ACTION_SET = {"attack", "skill", "burst"}
     
     def __init__(self, action_mapping: dict, debug: bool=False, debug_period: int=10, options: dict | None=None, target: dict | None=None) -> None:
         self.debug = debug
@@ -45,6 +48,7 @@ class GcsimEnv:
         with open(self.CONFIG_HEADER_FILE_PATH, "r") as config_header_file:
             self.config_header_content = config_header_file.read()
         
+        self.seed = None
         self.options = options or self.DEFAULT_OPTIONS
         self.enemy = target or self.DEFAULT_TARGET
         self.config_file_write_position = None
@@ -56,6 +60,7 @@ class GcsimEnv:
         """
         
         self.episode_count += 1
+        self.seed = np.random.randint(100_000_000, 999_999_999)
         self._reset_config_file()
 
     @abstractmethod
@@ -79,26 +84,45 @@ class GcsimEnv:
     def get_state_dim(self) -> int:
         pass
 
-    def _analyze_gcsim_out(self) -> float:
+    def _analyze_gcsim_out(self) -> tuple[float, float]:
+        with open(self.GCSIM_OUT_FILE_PATH, "r") as gcsim_out_file:
+            data = json.load(gcsim_out_file)
+
         cd_duration, rps = 0, 0
+        rps = data["statistics"]["rps"]["mean"]
         
-        with open(self.GCSIM_OUT_FILE_PATH, "r") as gcsim_out:
-            data = json.load(gcsim_out)
-            rps = data["statistics"]["rps"]["mean"]
-            
-            failed_actions = data["statistics"]["failed_actions"]
-            for failed_action in failed_actions:
-                cd_duration += failed_action["skill_cd"]["mean"]
+        failed_actions = data["statistics"]["failed_actions"]
+        for failed_action in failed_actions:
+            cd_duration += failed_action["skill_cd"]["mean"]
         
         return cd_duration, rps
+    
+    def _analyze_gcsim_sample(self) -> tuple[list[int], list[float]]:
+        with open(self.GCSIM_SAMPLE_FILE_PATH, "r") as gcsim_sample_file:
+            data = json.load(gcsim_sample_file)
 
-    def _run_gcsim(self) -> tuple[float, float, float]:
-        """
-        return a tuple of dmg, duration, dps
-        """
-        
+        # when does the action happen, damage partitioned by each action
+        action_frames, damages = [], []
+        for log in data["logs"]:
+            is_real_action_event = (log["event"] == "action") and ("action" in log["logs"]) and (log["logs"]["action"] in self.ACTION_SET)
+            is_damage_event      = (log["event"] == "damage")
+
+            if is_real_action_event:
+                action_frames.append(log["frame"])
+                damages.append(0)
+            elif is_damage_event:
+                damages[-1] += log["logs"]["damage"]
+
+        return action_frames, damages
+
+    def _run_gcsim(self) -> tuple[float, float, float]:        
         try:
-            result = subprocess.run([self.GCSIM_PATH, '-c', self.CONFIG_FILE_PATH, '-out', self.GCSIM_OUT_FILE_PATH], check=True, capture_output=True, text=True)
+            result = subprocess.run(
+                [self.GCSIM_PATH, '-c', self.CONFIG_FILE_PATH, '-out', self.GCSIM_OUT_FILE_PATH, '-sample', self.GCSIM_SAMPLE_FILE_PATH, '-seed', str(self.seed)], 
+                check=True, 
+                capture_output=True, 
+                text=True
+            )
             output = result.stdout
 
             match_dmg = re.search(r"Average (\d+\.\d+) damage", output)
