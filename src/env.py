@@ -165,23 +165,7 @@ class GcsimV1(GcsimEnv):
         self.state[1:] = 0
 
         return self.state
-    
-    @override
-    def step(self, action: int) -> tuple[np.ndarray, float, bool]:
-        super().step(action)
         
-        self.step_count += 1
-        self.state[self.step_count] = action
-        done = self.step_count == self.steps_per_episode
-
-        reward = 0.0
-        self._update_config_file(action)
-        if done:
-            raw_dps = self._run_gcsim()
-            reward = self._compute_reward(raw_dps)
-        
-        return self.state, reward, done
-    
     def _compute_reward(self, dps: float) -> float:
         raw_reward = dps
         normalized_reward = raw_reward / 10000
