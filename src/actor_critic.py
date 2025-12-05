@@ -2,12 +2,13 @@ import tensorflow as tf
 import keras
 from custom_layers import OneHotWithMasking
 from keras import layers
+from env import GcsimState
 
 
 class ActorCritic(keras.Model):
-    def __init__(self, state_size, n_actions):
+    def __init__(self, seq_len, n_actions):
         super().__init__()
-        self.state_dim  = state_size
+        self.seq_len = seq_len
         self.action_size = n_actions
 
         # Shared layers
@@ -36,15 +37,17 @@ class ActorCritic(keras.Model):
         self.critic_hidden_2 = layers.Dense(32, activation='relu')
         self.critic_output   = layers.Dense(1, activation='linear')
 
-        self.build(input_shape=(None, self.state_dim))
+        self.build(input_shape=(None, self.seq_len))
 
     @tf.function
     def call(self, inputs):
-        # return self._call_ver_1(inputs)
-        # return self._call_ver_2(inputs)
-        # return self._call_ver_3(inputs)
-        # return self._call_ver_4(inputs)
-        return self._call_ver_5(inputs)
+        action_seq, duration = inputs
+        
+        # return self._call_ver_1(action_seq)
+        # return self._call_ver_2(action_seq)
+        # return self._call_ver_3(action_seq)
+        # return self._call_ver_4(action_seq)
+        return self._call_ver_5(action_seq)
     
     def _call_ver_1(self, inputs):
         one_hot_features = self.one_hot_layer_1(inputs)
@@ -92,7 +95,7 @@ class ActorCritic(keras.Model):
         one_hot_features = self.one_hot_layer_2(inputs)
 
         zeros_cnt = tf.reduce_sum(tf.cast(inputs == 0, tf.int32))
-        is_start_neuron = tf.constant([[int(zeros_cnt == self.state_dim - 1)]], dtype=tf.float32)
+        is_start_neuron = tf.constant([[int(zeros_cnt == self.seq_len - 1)]], dtype=tf.float32)
 
         actor_input = one_hot_features[:, 1:, :-1]
         actor = self.flatten_layer(actor_input)
@@ -120,10 +123,8 @@ class ActorCritic(keras.Model):
 
 # Example usage
 if __name__ == "__main__":
-    state_size = 20
-    action_size = 2
+    seq_len = 20
+    n_actions = 2
 
-    sample_input = tf.convert_to_tensor([[action_size+1] + ([0] * (state_size-1))], dtype=tf.int32)
-    model = ActorCritic(state_size, action_size)
-    model(sample_input)
+    model = ActorCritic(seq_len, n_actions)
     print(model.summary())

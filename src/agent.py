@@ -3,7 +3,7 @@ import keras
 import numpy as np
 from pathlib import Path
 from actor_critic import ActorCritic
-from env import GcsimEnv, GcsimV1
+from env import GcsimEnv, GcsimV1, GcsimState
 from tqdm import tqdm
 from custom_plot import plot_time_series
 
@@ -19,10 +19,10 @@ class Agent:
         self.entropy_coeff = tf.constant(entropy_coeff, dtype=tf.float32)
         self.critic_loss_coeff = tf.constant(critic_loss_coeff, dtype=tf.float32)
         
-        self.state_dim = self.env.get_state_dim()
+        self.seq_len = self.env.get_seq_len()
         self.n_actions = self.env.get_n_actions()
 
-        self.actor_critic = ActorCritic(self.state_dim, self.n_actions)
+        self.actor_critic = ActorCritic(self.seq_len, self.n_actions)
         self.optimizer = keras.optimizers.Adam(learning_rate=alpha)
 
         self.cumulative_reward_history = []
@@ -36,7 +36,8 @@ class Agent:
         self._save_final_return_history(final_return_history_path)
 
     def _load_weights(self, weights_h5_path):
-        dummy_input = tf.zeros((1, self.state_dim))
+        dummy_input = (tf.zeros((1, self.seq_len)), tf.zeros((1, 1)))
+
         self.actor_critic(dummy_input)
         self.actor_critic.load_weights(weights_h5_path)
         
@@ -55,12 +56,15 @@ class Agent:
                 value = value
                 f.write(str(value) + "\n")
     
-    def predict(self, state):
+    def predict(self, state: GcsimState):
         action, _, _, _ = self._predict(state)
         return action
 
-    def _predict(self, state: np.ndarray):    
-        prob_distribution, state_value = self.actor_critic(state)
+    def _predict(self, state: GcsimState):
+        action_seq = tf.expand_dims(tf.convert_to_tensor(state.action_seq, dtype=tf.int32), axis=0)
+        duration = tf.convert_to_tensor([[state.duration or 0]], dtype=tf.float32)
+        
+        prob_distribution, state_value = self.actor_critic([action_seq, duration])
         prob_distribution = tf.squeeze(prob_distribution)
         state_value = tf.squeeze(state_value)
 
@@ -75,7 +79,7 @@ class Agent:
         for episode in range(1, n_episodes+1):
             print("episode", episode)
             
-            state = tf.expand_dims(tf.convert_to_tensor(self.env.reset(), dtype=tf.int32), axis=0)
+            state = self.env.reset()
             done = False
 
             states = []
@@ -98,7 +102,7 @@ class Agent:
                     rewards.append(reward)
                     states.append(state)
 
-                    state = tf.expand_dims(tf.convert_to_tensor(state_, dtype=tf.int32), axis=0)
+                    state = state_
                 
                 if done:
                     T = t1
@@ -130,7 +134,7 @@ class Agent:
                         critic_loss = -1 * tf.stop_gradient(advantage) * state_value * self.critic_loss_coeff
                         total_loss = actor_loss + critic_loss - entropy
 
-                    # print("actor_loss=", actor_loss)
+                    # print("actor_loss =", actor_loss)
                     # print("critic_loss =", critic_loss)
                     # print("before =", state_value)
 
@@ -160,10 +164,10 @@ if __name__ == "__main__":
     }
     
     env = GcsimV1(action_mapping, debug=True)
-    agent = Agent(env, gamma=1.0, entropy_coeff=0.0, critic_loss_coeff=50, alpha=1e-4, n_step=30)
+    agent = Agent(env, gamma=1.0, entropy_coeff=0.0, critic_loss_coeff=0.5, alpha=8e-5, n_step=50)
     agent.load(WEIGHTS_H5_PATH, FINAL_RETURN_HISTORY_PATH)
     
-    agent.learn(1)
+    agent.learn(1000)
     agent.save(WEIGHTS_H5_PATH, FINAL_RETURN_HISTORY_PATH)
 
     env.close()

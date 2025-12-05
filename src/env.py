@@ -1,6 +1,7 @@
 from abc import abstractmethod
 from typing import override
 from pathlib import Path
+from dataclasses import dataclass
 import numpy as np
 import subprocess
 import re
@@ -8,6 +9,11 @@ import json
 
 SCRIPT_PATH = Path(__file__)
 PROJECT_ROOT = SCRIPT_PATH.parent.parent
+
+@dataclass
+class GcsimState:
+    action_seq: np.ndarray
+    duration: float | None
 
 
 class GcsimEnv:
@@ -54,7 +60,7 @@ class GcsimEnv:
         self.config_file_write_position = None
 
     @abstractmethod
-    def reset(self) -> np.ndarray:
+    def reset(self) -> GcsimState:
         """
         Reset the environment to an initial state and return the initial observation.
         """
@@ -64,7 +70,7 @@ class GcsimEnv:
         self._reset_config_file()
 
     @abstractmethod
-    def step(self, action) -> tuple[np.ndarray, float, bool]:
+    def step(self, action) -> tuple[GcsimState, float, bool]:
         """
         Execute one time step within the environment.
         """
@@ -81,7 +87,7 @@ class GcsimEnv:
         return len(self.action_mapping)
     
     @abstractmethod
-    def get_state_dim(self) -> int:
+    def get_seq_len(self) -> int:
         pass
 
     def _analyze_gcsim_out(self) -> tuple[float, float]:
@@ -175,16 +181,16 @@ class GcsimV1(GcsimEnv):
         super().__init__(action_mapping, debug, debug_period, options, target)
 
         self.steps_per_episode = steps_per_episode
-        self.state = np.zeros((self.steps_per_episode + 1,), dtype=np.int32)
-        self.state[0] = self.n_actions + 1 # the <start> token
+        self.state = GcsimState(np.zeros((self.steps_per_episode + 1,), dtype=np.int32), None)
+        self.state.action_seq[0] = self.n_actions + 1 # the <start> token
         self.step_count = 0
     
     @override
-    def reset(self) -> np.ndarray:
+    def reset(self) -> GcsimState:
         super().reset()
 
         self.step_count = 0
-        self.state[1:] = 0
+        self.state.action_seq[1:] = 0
 
         return self.state
         
@@ -198,13 +204,13 @@ class GcsimV1(GcsimEnv):
         return normalized_reward - penalty
     
     @override
-    def get_state_dim(self) -> int:
+    def get_seq_len(self) -> int:
         return self.steps_per_episode + 1
     
     @override
-    def step(self, action: int) -> tuple[np.ndarray, float, bool]:
+    def step(self, action: int) -> tuple[GcsimState, float, bool]:
         self.step_count += 1
-        self.state[self.step_count] = action
+        self.state.action_seq[self.step_count] = action
         done = self.step_count == self.steps_per_episode
 
         reward = 0.0
@@ -262,10 +268,9 @@ if __name__ == "__main__":
     }
     
     env = GcsimV1(action_mapping)
-
-    state = env.reset()
-    state_, reward, done = env.step(4)
-    env._run_gcsim()
-    print(reward)
+    action_frames, damages = env._analyze_gcsim_sample()
+    total_damage = sum(damages)
+    print(total_damage)
+    print(len(action_frames) == len(damages))
     
     env.close()
