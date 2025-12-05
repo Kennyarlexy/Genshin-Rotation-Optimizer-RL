@@ -116,7 +116,7 @@ class Agent:
                             print(state_value)
 
                         action_prob = prob_distribution[actions[t2-1]-1]
-                        log_action_prob = tf.math.log(action_prob)
+                        log_action_prob = tf.math.log(action_prob + 1e-10)
                         entropy = -1 * tf.reduce_sum(prob_distribution * tf.math.log(prob_distribution + 1e-10)) * self.entropy_coeff
                         
                         t3 = min(T, t2 + self.n_step - 1) # point to last reward of the cumulative return
