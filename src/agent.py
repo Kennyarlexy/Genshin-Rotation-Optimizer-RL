@@ -22,7 +22,8 @@ class Agent:
         self.seq_len = self.env.get_seq_len()
         self.n_actions = self.env.get_n_actions()
 
-        self.actor_critic = ActorCritic(self.seq_len, self.n_actions)
+        n_special_actions = self.env.get_n_special_actions()
+        self.actor_critic = ActorCritic(self.seq_len, self.n_actions, n_special_actions)
         self.optimizer = keras.optimizers.Adam(learning_rate=alpha)
 
         self.cumulative_reward_history = []

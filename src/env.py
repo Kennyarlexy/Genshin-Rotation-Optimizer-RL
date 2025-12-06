@@ -54,7 +54,7 @@ class GcsimEnv:
         self.action_list = action_list
         self.episode_count = 0
         self.n_actions = self.get_n_actions()
-        self.n_special_actions = self._get_n_special_actions()
+        self.n_special_actions = self.get_n_special_actions()
         
         self.config_file = open(self.CONFIG_FILE_PATH, "r+")
         with open(self.CONFIG_HEADER_FILE_PATH, "r") as config_header_file:
@@ -92,7 +92,7 @@ class GcsimEnv:
     def get_n_actions(self) -> int:
         return len(self.action_list)
     
-    def _get_n_special_actions(self) -> int:
+    def get_n_special_actions(self) -> int:
         return len(self.SPECIAL_ACTIONS)
     
     @abstractmethod

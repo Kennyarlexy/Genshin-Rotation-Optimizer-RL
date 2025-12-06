@@ -6,21 +6,21 @@ from env import GcsimState
 
 
 class ActorCritic(keras.Model):
-    def __init__(self, seq_len, n_actions):
+    def __init__(self, seq_len, n_actions, n_special_actions):
         super().__init__()
         self.seq_len = seq_len
         self.action_size = n_actions
 
         # Shared layers
         self.one_hot_layer_1 = layers.CategoryEncoding(
-            num_tokens=n_actions+1,
+            num_tokens=n_actions+n_special_actions,
             output_mode='one_hot'
         )
-        self.one_hot_layer_2 = OneHotWithMasking(depth=n_actions+2)
+        self.one_hot_layer_2 = OneHotWithMasking(depth=n_actions+n_special_actions)
         
         self.concat        = layers.Concatenate()
         self.flatten_layer = layers.Flatten()
-        self.embedding     = layers.Embedding(input_dim=n_actions+1, output_dim=3, name='action_embedding', mask_zero=True)
+        self.embedding     = layers.Embedding(input_dim=n_actions+n_special_actions, output_dim=3, name='action_embedding', mask_zero=True)
         self.lstm_1        = layers.LSTM(16, return_sequences=True)
         self.lstm_2        = layers.LSTM(64)
         self.dense_1       = layers.Dense(32, activation='relu')
@@ -126,5 +126,5 @@ if __name__ == "__main__":
     seq_len = 20
     n_actions = 2
 
-    model = ActorCritic(seq_len, n_actions)
+    model = ActorCritic(seq_len, n_actions, n_special_actions=2)
     print(model.summary())
