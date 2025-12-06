@@ -160,7 +160,7 @@ class GcsimEnv:
 
     def _update_config_file(self, action: int) -> None:
         self.config_file.seek(0, 2)
-        self.config_file.write(self.action_list[action])
+        self.config_file.write(f"{self.action_list[action]};")
         self.config_file.flush()
 
     def _reset_config_file(self) -> None:
@@ -269,7 +269,7 @@ class GcsimV1(GcsimEnv):
 #         return self.state, reward, done
 
 if __name__ == "__main__":
-    action_list = ["alhaitham attack;", "alhaitham skill;", "furina skill;", "kuki skill;"]
+    action_list = ["alhaitham attack", "alhaitham skill", "furina skill", "kuki skill"]
     
     env = GcsimV1(action_list)
     action_frames, damages = env._analyze_gcsim_sample()

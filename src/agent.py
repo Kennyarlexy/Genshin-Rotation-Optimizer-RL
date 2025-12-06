@@ -156,7 +156,7 @@ if __name__ == "__main__":
     WEIGHTS_H5_PATH = PROJECT_ROOT / 'models' / 'actor_critic.weights.h5'
     FINAL_RETURN_HISTORY_PATH = PROJECT_ROOT / 'var' / 'final_return_history.txt'
 
-    action_list = ["alhaitham attack;", "alhaitham skill;", "furina skill;", "kuki skill;"]
+    action_list = ["alhaitham attack", "alhaitham skill", "furina skill", "kuki skill"]
     
     env = GcsimV1(action_list, debug=True)
     agent = Agent(env, gamma=1.0, entropy_coeff=0.0, critic_loss_coeff=0.5, alpha=8e-5, n_step=50)
