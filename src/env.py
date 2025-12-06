@@ -41,14 +41,20 @@ class GcsimEnv:
     }
 
     ACTION_SET = {"attack", "skill", "burst"}
+    SPECIAL_ACTIONS = {
+        "<none>": 0, 
+        "<start>": 1,
+    }
     
-    def __init__(self, action_mapping: dict, debug: bool=False, debug_period: int=10, options: dict | None=None, target: dict | None=None) -> None:
+    
+    def __init__(self, action_list: list[str], debug: bool=False, debug_period: int=10, options: dict | None=None, target: dict | None=None) -> None:
         self.debug = debug
         self.debug_period = debug_period
 
-        self.action_mapping = action_mapping
+        self.action_list = action_list
         self.episode_count = 0
         self.n_actions = self.get_n_actions()
+        self.n_special_actions = self._get_n_special_actions()
         
         self.config_file = open(self.CONFIG_FILE_PATH, "r+")
         with open(self.CONFIG_HEADER_FILE_PATH, "r") as config_header_file:
@@ -84,7 +90,10 @@ class GcsimEnv:
             self.config_file.close()
 
     def get_n_actions(self) -> int:
-        return len(self.action_mapping)
+        return len(self.action_list)
+    
+    def _get_n_special_actions(self) -> int:
+        return len(self.SPECIAL_ACTIONS)
     
     @abstractmethod
     def get_seq_len(self) -> int:
@@ -151,7 +160,7 @@ class GcsimEnv:
 
     def _update_config_file(self, action: int) -> None:
         self.config_file.seek(0, 2)
-        self.config_file.write(self.action_mapping[action])
+        self.config_file.write(self.action_list[action])
         self.config_file.flush()
 
     def _reset_config_file(self) -> None:
@@ -177,12 +186,12 @@ class GcsimV1(GcsimEnv):
     GcsimEnv with fixed number of steps per episode
     """
 
-    def __init__(self, action_mapping: dict, steps_per_episode=30, debug: bool=False, debug_period: int=10, options: dict | None=None, target: dict | None=None):
-        super().__init__(action_mapping, debug, debug_period, options, target)
+    def __init__(self, action_list: list[str], steps_per_episode=30, debug: bool=False, debug_period: int=10, options: dict | None=None, target: dict | None=None):
+        super().__init__(action_list, debug, debug_period, options, target)
 
         self.steps_per_episode = steps_per_episode
         self.state = GcsimState(np.zeros((self.steps_per_episode + 1,), dtype=np.int32), None)
-        self.state.action_seq[0] = self.n_actions + 1 # the <start> token
+        self.state.action_seq[0] = self.SPECIAL_ACTIONS["<start>"]
         self.step_count = 0
     
     @override
@@ -190,7 +199,7 @@ class GcsimV1(GcsimEnv):
         super().reset()
 
         self.step_count = 0
-        self.state.action_seq[1:] = 0
+        self.state.action_seq[1:] = self.SPECIAL_ACTIONS["<none>"]
 
         return self.state
         
@@ -210,7 +219,7 @@ class GcsimV1(GcsimEnv):
     @override
     def step(self, action: int) -> tuple[GcsimState, float, bool]:
         self.step_count += 1
-        self.state.action_seq[self.step_count] = action
+        self.state.action_seq[self.step_count] = action + self.n_special_actions
         done = self.step_count == self.steps_per_episode
 
         reward = 0.0
@@ -260,14 +269,9 @@ class GcsimV1(GcsimEnv):
 #         return self.state, reward, done
 
 if __name__ == "__main__":
-    action_mapping = {
-        1: "alhaitham attack;",
-        2: "alhaitham skill;",
-        3: "furina skill;",
-        4: "kuki skill;",
-    }
+    action_list = ["alhaitham attack;", "alhaitham skill;", "furina skill;", "kuki skill;"]
     
-    env = GcsimV1(action_mapping)
+    env = GcsimV1(action_list)
     action_frames, damages = env._analyze_gcsim_sample()
     total_damage = sum(damages)
     print(total_damage)

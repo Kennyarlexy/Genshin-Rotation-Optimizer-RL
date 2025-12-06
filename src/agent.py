@@ -69,7 +69,7 @@ class Agent:
         state_value = tf.squeeze(state_value)
 
         sampled_action_index = np.random.choice(self.n_actions, p=prob_distribution.numpy())
-        action = sampled_action_index + 1 # used in env.step()
+        action = sampled_action_index
 
         action_prob = prob_distribution[sampled_action_index]
 
@@ -156,14 +156,9 @@ if __name__ == "__main__":
     WEIGHTS_H5_PATH = PROJECT_ROOT / 'models' / 'actor_critic.weights.h5'
     FINAL_RETURN_HISTORY_PATH = PROJECT_ROOT / 'var' / 'final_return_history.txt'
 
-    action_mapping = {
-        1: "alhaitham attack;",
-        2: "alhaitham skill;",
-        3: "furina skill;",
-        4: "kuki skill;",
-    }
+    action_list = ["alhaitham attack;", "alhaitham skill;", "furina skill;", "kuki skill;"]
     
-    env = GcsimV1(action_mapping, debug=True)
+    env = GcsimV1(action_list, debug=True)
     agent = Agent(env, gamma=1.0, entropy_coeff=0.0, critic_loss_coeff=0.5, alpha=8e-5, n_step=50)
     agent.load(WEIGHTS_H5_PATH, FINAL_RETURN_HISTORY_PATH)
     
