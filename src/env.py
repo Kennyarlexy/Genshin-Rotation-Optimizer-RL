@@ -13,7 +13,7 @@ PROJECT_ROOT = SCRIPT_PATH.parent.parent
 @dataclass
 class GcsimState:
     action_seq: np.ndarray
-    duration: float | None
+    duration_left: float | None     # in seconds
 
 
 class GcsimEnv:

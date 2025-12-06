@@ -62,7 +62,7 @@ class Agent:
 
     def _predict(self, state: GcsimState):
         action_seq = tf.expand_dims(tf.convert_to_tensor(state.action_seq, dtype=tf.int32), axis=0)
-        duration = tf.convert_to_tensor([[state.duration or 0]], dtype=tf.float32)
+        duration = tf.convert_to_tensor([[state.duration_left or 0]], dtype=tf.float32)
         
         prob_distribution, state_value = self.actor_critic([action_seq, duration])
         prob_distribution = tf.squeeze(prob_distribution)
