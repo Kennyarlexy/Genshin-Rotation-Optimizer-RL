@@ -40,7 +40,7 @@ class GcsimEnv:
         "particle_drop_count": 3,
     }
 
-    ACTION_SET = {"attack", "skill", "burst"}
+    ACTION_TYPES = {"attack", "skill", "burst"}
     SPECIAL_ACTIONS = {
         "<none>": 0, 
         "<start>": 1,
@@ -119,7 +119,7 @@ class GcsimEnv:
         # when does the action happen, damage partitioned by each action
         action_frames, damages = [], []
         for log in data["logs"]:
-            is_real_action_event = (log["event"] == "action") and ("action" in log["logs"]) and (log["logs"]["action"] in self.ACTION_SET)
+            is_real_action_event = (log["event"] == "action") and ("action" in log["logs"]) and (log["logs"]["action"] in self.ACTION_TYPES)
             is_damage_event      = (log["event"] == "damage")
 
             if is_real_action_event:
