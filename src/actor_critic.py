@@ -41,7 +41,7 @@ class ActorCritic(keras.Model):
 
     @tf.function
     def call(self, inputs):
-        action_seq, duration = inputs
+        action_seq, duration_left = inputs
         
         # return self._call_ver_1(action_seq)
         # return self._call_ver_2(action_seq)

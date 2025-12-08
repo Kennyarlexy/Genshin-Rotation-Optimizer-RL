@@ -14,7 +14,7 @@ PROJECT_ROOT = SCRIPT_PATH.parent.parent
 @dataclass
 class GcsimState:
     action_seq: np.ndarray
-    duration_left: float | None     # in seconds
+    duration_left: float | None = 0     # in seconds, normalized
 
 
 class GcsimEnv:
@@ -191,7 +191,7 @@ class GcsimV1(GcsimEnv):
         super().__init__(action_list, debug, debug_period, options, target)
 
         self.steps_per_episode = steps_per_episode
-        self.state = GcsimState(np.zeros((self.steps_per_episode + 1,), dtype=np.int32), None)
+        self.state = GcsimState(np.zeros((self.steps_per_episode + 1,), dtype=np.int32))
         self.state.action_seq[0] = self.SPECIAL_ACTIONS["<start>"]
         self.step_count = 0
     
