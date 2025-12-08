@@ -41,7 +41,9 @@ class ActorCritic(keras.Model):
 
     @tf.function
     def call(self, inputs):
-        action_seq, duration_left = inputs
+        action_seq = inputs["action_seq"]
+        action_frames = inputs["action_frames"]
+        duration_left = inputs["duration_left"]
         
         # return self._call_ver_1(action_seq)
         # return self._call_ver_2(action_seq)
@@ -136,7 +138,7 @@ class ActorCritic(keras.Model):
 
         return actor, critic
 
-    def _call_ver_7(self, action_seq, duration_left):
+    def _call_ver_7(self, action_seq, action_frames, duration_left):
         one_hot_features = self.one_hot_layer_2(action_seq)
         action_frames = tf.expand_dims(action_frames, axis=-1)
         seq_features = self.concat([one_hot_features, action_frames])
@@ -156,6 +158,7 @@ class ActorCritic(keras.Model):
 
 # Example usage
 if __name__ == "__main__":
+
     seq_len = 20
     n_actions = 2
 

@@ -37,7 +37,11 @@ class Agent:
         self._save_final_return_history(final_return_history_path)
 
     def _load_weights(self, weights_h5_path):
-        dummy_input = (tf.zeros((1, self.seq_len)), tf.zeros((1, 1)))
+        dummy_input = {
+            "action_seq": tf.zeros((1, self.seq_len)), 
+            "action_frames": tf.zeros((1, self.seq_len)), 
+            "duration_left": tf.zeros((1, 1)),
+        }
 
         self.actor_critic(dummy_input)
         self.actor_critic.load_weights(weights_h5_path)
@@ -63,9 +67,18 @@ class Agent:
 
     def _predict(self, state: GcsimState):
         action_seq = tf.expand_dims(tf.convert_to_tensor(state.action_seq, dtype=tf.int32), axis=0)
+        action_frames = None
+        if state.action_frames is not None:
+            action_frames = tf.expand_dims(tf.convert_to_tensor(state.action_frames, dtype=tf.float32), axis=0)
         duration_left = tf.convert_to_tensor([[state.duration_left or 0]], dtype=tf.float32)
         
-        prob_distribution, state_value = self.actor_critic([action_seq, duration_left])
+        prob_distribution, state_value = self.actor_critic(
+            {
+                "action_seq": action_seq,
+                "action_frames": action_frames,
+                "duration_left": duration_left,
+            }
+        )
         prob_distribution = tf.squeeze(prob_distribution)
         state_value = tf.squeeze(state_value)
 

@@ -14,6 +14,7 @@ PROJECT_ROOT = SCRIPT_PATH.parent.parent
 @dataclass
 class GcsimState:
     action_seq: np.ndarray
+    action_frames: np.ndarray | None = None
     duration_left: float | None = 0     # in seconds, normalized
 
 
@@ -263,7 +264,7 @@ class GcsimV2(GcsimEnv):
         super().__init__(action_list, debug, debug_period, options or self.DEFAULT_OPTIONS, target or self.DEFAULT_TARGET)
         
         self.duration = duration
-        self.state = GcsimState(np.zeros((self.MAX_SEQ_LEN,), dtype=np.int32), self.duration)
+        self.state = GcsimState(np.zeros((self.MAX_SEQ_LEN,), dtype=np.int32), np.zeros((self.MAX_SEQ_LEN,), dtype=np.float32), self.duration)
         self.state.action_seq[0] = self.SPECIAL_ACTIONS["<start>"]
         self.step_count = 0
 
@@ -275,6 +276,7 @@ class GcsimV2(GcsimEnv):
 
         self.step_count = 0
         self.state.action_seq[1:] = self.SPECIAL_ACTIONS["<none>"]
+        self.state.action_frames[1:] = 0
         self.state.duration_left = 1 # normalized (full duration is 1)
         self.last_action_frame = None
 
@@ -288,6 +290,7 @@ class GcsimV2(GcsimEnv):
                 
         self.step_count += 1
         self.state.action_seq[self.step_count] = action + self.n_special_actions
+        self.state.action_frames[self.step_count] = action_frames[-1] / (60*self.duration)
         self.state.duration_left = (self.duration - (action_frames[-1] / 60)) / self.duration
 
         reward = 0.0 
