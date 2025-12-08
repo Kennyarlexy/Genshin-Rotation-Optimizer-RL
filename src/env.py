@@ -6,6 +6,7 @@ import numpy as np
 import subprocess
 import re
 import json
+import copy
 
 SCRIPT_PATH = Path(__file__)
 PROJECT_ROOT = SCRIPT_PATH.parent.parent
@@ -201,7 +202,7 @@ class GcsimV1(GcsimEnv):
         self.step_count = 0
         self.state.action_seq[1:] = self.SPECIAL_ACTIONS["<none>"]
 
-        return self.state
+        return copy.deepcopy(self.state)
         
     def _compute_reward(self, dps: float) -> float:
         raw_reward = dps
@@ -228,7 +229,7 @@ class GcsimV1(GcsimEnv):
             _, _, dps = self._run_gcsim()
             reward = self._compute_reward(dps)
         
-        return self.state, reward, done
+        return copy.deepcopy(self.state), reward, done
 
 
 # class GcsimV2(GcsimEnv):
