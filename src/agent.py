@@ -3,7 +3,7 @@ import keras
 import numpy as np
 from pathlib import Path
 from actor_critic import ActorCritic
-from env import GcsimEnv, GcsimV1, GcsimState
+from env import GcsimEnv, GcsimV1, GcsimV2, GcsimState
 from tqdm import tqdm
 from custom_plot import plot_time_series
 
@@ -159,11 +159,11 @@ if __name__ == "__main__":
 
     action_list = ["alhaitham attack", "alhaitham skill", "furina skill", "kuki skill"]
     
-    env = GcsimV1(action_list, debug=True)
-    agent = Agent(env, gamma=1.0, entropy_coeff=0.0, critic_loss_coeff=0.5, alpha=8e-5, n_step=50)
-    agent.load(WEIGHTS_H5_PATH, FINAL_RETURN_HISTORY_PATH)
+    env = GcsimV2(action_list, debug=False)
+    agent = Agent(env, gamma=1.0, entropy_coeff=0.1, critic_loss_coeff=0.5, alpha=1e-4, n_step=5)
+    # agent.load(WEIGHTS_H5_PATH, FINAL_RETURN_HISTORY_PATH)
     
-    agent.learn(1000)
+    agent.learn(500)
     agent.save(WEIGHTS_H5_PATH, FINAL_RETURN_HISTORY_PATH)
 
     env.close()

@@ -232,42 +232,81 @@ class GcsimV1(GcsimEnv):
         return copy.deepcopy(self.state), reward, done
 
 
-# class GcsimV2(GcsimEnv):
-#     """
-#     GcsimEnv with fixed duration in seconds
-#     """
+class GcsimV2(GcsimEnv):
+    """
+    GcsimEnv with fixed duration in seconds, default=60s
+
+    Note:
+    If you specify `'duration'` key in `options` dict, it will be ignored (replaced by the `duration` parameter).
+
+    """
+
+    DEFAULT_OPTIONS = {
+        "iteration": 1,
+        "swap_delay": 14,
+    }
+
+    DEFAULT_TARGET = {
+        "lvl": 100,
+        "resist": 0.1,
+        "particle_threshold": 520000,
+        "particle_drop_count": 3,
+    }
+
+    MAX_SEQ_LEN = 150 # this shouldn't be exceeded in any case
     
-#     def __init__(self, action_mapping: dict, duration: float=30, debug: bool=False, debug_period: int=10):
-#         super().__init__(action_mapping, debug, debug_period)
+    def __init__(self, action_list: list[str], duration: float=60.0, debug: bool=False, debug_period: int=10, options: dict | None=None, target: dict | None=None):
+        options = options or self.DEFAULT_OPTIONS
+        target = target or self.DEFAULT_TARGET
+        options["duration"] = duration
+
+        super().__init__(action_list, debug, debug_period, options or self.DEFAULT_OPTIONS, target or self.DEFAULT_TARGET)
         
-#         self.duration = duration
-#         self.state = np.zeros((150,), dtype=np.int32)
-#         self.state[0] = self.n_actions + 1 # the <start> token
-#         self.step_count = 0
+        self.duration = duration
+        self.state = GcsimState(np.zeros((self.MAX_SEQ_LEN,), dtype=np.int32), self.duration)
+        self.state.action_seq[0] = self.SPECIAL_ACTIONS["<start>"]
+        self.step_count = 0
 
-#     @override
-#     def reset(self) -> np.ndarray:
-#         super().reset()
+        self.last_action_frame = None
 
-#         self.step_count = 0
-#         self.state[1:] = 0
+    @override
+    def reset(self) -> GcsimEnv:
+        super().reset()
 
-#         return self.state
+        self.step_count = 0
+        self.state.action_seq[1:] = self.SPECIAL_ACTIONS["<none>"]
+        self.state.duration_left = 1 # normalized (full duration is 1)
+        self.last_action_frame = None
+
+        return copy.deepcopy(self.state)
         
-#     @override
-#     def step(self, action: int) -> tuple[np.ndarray, float, bool]:
-#         super().step(action)
+    @override
+    def step(self, action: int) -> tuple[GcsimState, float, bool]:
+        self._update_config_file(action)
+        _, _, _ = self._run_gcsim()
+        action_frames, damages = self._analyze_gcsim_sample()
+                
+        self.step_count += 1
+        self.state.action_seq[self.step_count] = action + self.n_special_actions
+        self.state.duration_left = (self.duration - (action_frames[-1] / 60)) / self.duration
 
-#         dmg, duration, _ = self._run_gcsim()
+        reward = 0.0 
+        done = (action_frames[-1] == self.last_action_frame)
+        if done:
+            reward = damages[-1]
+        elif self.step_count > 1:
+            reward = damages[-2]
         
-#         self.step_count += 1
-#         self.state[self.step_count] = action
-#         done = duration == self.duration
+        reward /= 1e6
+        
+        self.last_action_frame = action_frames[-1]
+        
+        return copy.deepcopy(self.state), reward, done
 
-#         reward = 0.0
-#         self._update_config_file(action)
-        
-#         return self.state, reward, done
+    @override
+    def get_seq_len(self):
+        return self.MAX_SEQ_LEN
+
 
 if __name__ == "__main__":
     action_list = ["alhaitham attack", "alhaitham skill", "furina skill", "kuki skill"]
