@@ -47,7 +47,8 @@ class ActorCritic(keras.Model):
         # return self._call_ver_2(action_seq)
         # return self._call_ver_3(action_seq)
         # return self._call_ver_4(action_seq)
-        return self._call_ver_5(action_seq)
+        # return self._call_ver_5(action_seq)
+        return self._call_ver_6(action_seq, duration_left)
     
     def _call_ver_1(self, inputs):
         one_hot_features = self.one_hot_layer_1(inputs)
@@ -120,6 +121,38 @@ class ActorCritic(keras.Model):
         critic = self.critic_output(critic)
 
         return actor, critic
+
+    def _call_ver_6(self, action_seq, duration_left):
+        one_hot_features = self.one_hot_layer_2(action_seq)
+        lstm_features    = self.lstm_2(one_hot_features)
+
+        concat_features = self.concat([lstm_features, duration_left])
+
+        actor = self.actor_hidden_1(concat_features)
+        actor = self.actor_output(actor)
+
+        critic = self.critic_hidden_1(concat_features)
+        critic = self.critic_output(critic)
+
+        return actor, critic
+
+    def _call_ver_7(self, action_seq, duration_left):
+        one_hot_features = self.one_hot_layer_2(action_seq)
+        action_frames = tf.expand_dims(action_frames, axis=-1)
+        seq_features = self.concat([one_hot_features, action_frames])
+        
+        lstm_features    = self.lstm_2(seq_features)
+
+        concat_features = self.concat([lstm_features, duration_left])
+
+        actor = self.actor_hidden_1(concat_features)
+        actor = self.actor_output(actor)
+
+        critic = self.critic_hidden_1(concat_features)
+        critic = self.critic_output(critic)
+
+        return actor, critic
+    
 
 # Example usage
 if __name__ == "__main__":
