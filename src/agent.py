@@ -124,15 +124,16 @@ class Agent:
                         G_t = tf.constant(0, dtype=tf.float32)
                         if (t2 + self.n_step - 1 < T):
                             _, _, state_value_, _ = self._predict(states[(t2 + self.n_step - 1) - 1])
-                            G_t = state_value_
+                            G_t = tf.stop_gradient(state_value_)
                         
                         for t in range(t3, t2-1, -1):
                             G_t = rewards[t-1] + self.gamma * G_t
 
-                        advantage = G_t - state_value
+                        advantage = tf.stop_gradient(G_t - state_value)
 
-                        actor_loss  = -1 * tf.stop_gradient(advantage) * log_action_prob 
-                        critic_loss = -1 * tf.stop_gradient(advantage) * state_value * self.critic_loss_coeff
+                        actor_loss  = -1 * advantage * log_action_prob 
+                        # critic_loss = -1 * advantage * state_value * self.critic_loss_coeff
+                        critic_loss = tf.square(G_t - state_value) * self.critic_loss_coeff
                         total_loss = actor_loss + critic_loss - entropy
 
                     # print("actor_loss =", actor_loss)
