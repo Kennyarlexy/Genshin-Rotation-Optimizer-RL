@@ -1,10 +1,10 @@
 import os
 import matplotlib.pyplot as plt
-import pandas as pd  # Import pandas for moving average calculation
+import pandas as pd
 
-def plot_time_series(data, filename="time_series_plot.png"):
+def plot_time_series(data, filename="time_series_plot.png", window=30):
     """
-    Plots a time series and its 5-point moving average, then saves it to a file.
+    Plots a time series and moving average, then saves it to a file.
 
     Parameters:
         data (list): A list of numerical values representing the time series.
@@ -13,35 +13,21 @@ def plot_time_series(data, filename="time_series_plot.png"):
     if not data:
         raise ValueError("The data list is empty.")
 
-    # --- Start of new code ---
-    # Calculate the 5-point moving average using pandas
-    # This creates NaN for the first 4 values, which matplotlib ignores when plotting.
-    moving_avg = pd.Series(data).rolling(window=10).mean()
-    # --- End of new code ---
+    moving_avg = pd.Series(data).rolling(window=window).mean()
 
-    # Ensure the "plots" directory exists
     os.makedirs("plots", exist_ok=True)
     filepath = os.path.join("plots", filename)
 
     plt.figure(figsize=(10, 6))
-
-    # Modified: Added a label for the legend
-    plt.plot(data, marker='o', linestyle='-', color='teal', linewidth=2, markersize=6, label='Actual Reward')
-    
-    # --- Start of new code ---
-    # Plot the moving average in orange
-    plt.plot(moving_avg, color='orange', linestyle='-', linewidth=2, label='10-Episode Moving Average')
-    # --- End of new code ---
+    plt.plot(data, marker='o', linestyle='-', color='teal', linewidth=2, markersize=6, label='Actual Reward')    
+    plt.plot(moving_avg, color='orange', linestyle='-', linewidth=2, label=f'{window}-Episode Moving Average')
 
     plt.title("Reward Per Episode", fontsize=16, fontweight='bold')
     plt.xlabel("Episode", fontsize=14)
     plt.ylabel("Reward", fontsize=14)
     plt.grid(True, linestyle='--', alpha=0.6)
     
-    # --- Start of new code ---
-    # Add a legend to identify the lines
     plt.legend()
-    # --- End of new code ---
     
     plt.tight_layout()
     plt.savefig(filepath)
