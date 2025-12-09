@@ -27,6 +27,7 @@ class Agent:
         self.optimizer = keras.optimizers.Adam(learning_rate=alpha)
 
         self.cumulative_reward_history = []
+        self.n_loaded_episodes = 0
 
     def load(self, weights_h5_path, final_return_history_path):
         self._load_weights(weights_h5_path)
@@ -54,6 +55,8 @@ class Agent:
             for value in f:
                 value = float(value.strip())
                 self.cumulative_reward_history.append(value)
+
+        self.n_loaded_episodes = len(self.cumulative_reward_history)
 
     def _save_final_return_history(self, final_return_history_path):
         with open(final_return_history_path, 'w') as f:
@@ -90,7 +93,7 @@ class Agent:
         return action, action_prob, state_value, prob_distribution
 
     def learn(self, n_episodes=1000):
-        for episode in range(1, n_episodes+1):
+        for episode in range(self.n_loaded_episodes + 1, self.n_loaded_episodes + n_episodes + 2):
             print("episode", episode)
             
             state = self.env.reset()
@@ -165,7 +168,8 @@ class Agent:
             self.cumulative_reward_history.append(cumulative_reward)
         
             if episode % 10 == 0:
-                plot_time_series(self.cumulative_reward_history)
+                window = episode // 100 + 10
+                plot_time_series(self.cumulative_reward_history, "reward_per_episode.png", window=window)
         
 if __name__ == "__main__":
     WEIGHTS_H5_PATH = PROJECT_ROOT / 'models' / 'actor_critic.weights.h5'
