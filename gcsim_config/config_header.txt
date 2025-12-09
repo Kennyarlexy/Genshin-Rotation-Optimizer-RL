@@ -23,7 +23,4 @@ kuki add set="flowerofparadiselost" count=4;
 kuki add set="desertpavilionchronicle" count=1;
 kuki add stats def%=0.131 def=76 hp=6483 hp%=0.35 atk=329 atk%=0.047 er=0.278 em=701.5 cr=0.151 cd=0.23299999999999998;
 
-options iteration=10 swap_delay=14;
-target lvl=100 type=dummy particle_threshold=520000 particle_drop_count=3;
-
 active nahida;
