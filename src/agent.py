@@ -93,7 +93,7 @@ class Agent:
         return action, action_prob, state_value, prob_distribution
 
     def learn(self, n_episodes=1000):
-        for episode in range(self.n_loaded_episodes + 1, self.n_loaded_episodes + n_episodes + 2):
+        for episode in range(self.n_loaded_episodes + 1, self.n_loaded_episodes + n_episodes + 1):
             print("episode", episode)
             
             state = self.env.reset()
