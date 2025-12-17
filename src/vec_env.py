@@ -18,6 +18,10 @@ class SyncVectorGcsimEnv:
         states, rewards, dones = results
         
         return self._stack_states(states), np.array(rewards), np.array(dones)
+    
+    def close(self) -> None:
+        for env in self.envs:
+            env.close()
 
     def _stack_states(self, state_list: list[GcsimState]) -> GcsimState:        
         batch_action_seq = np.stack([s.action_seq for s in state_list])
