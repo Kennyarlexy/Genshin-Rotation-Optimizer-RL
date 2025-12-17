@@ -22,12 +22,14 @@ class GcsimEnv:
     """
     A custom environment following the Gymnasium interface.
     """
-    GCSIM_PATH = PROJECT_ROOT / "bin" / "gcsim.exe"
-    GCSIM_OUT_FILE_PATH = PROJECT_ROOT / "gcsim_output" / "gcsim_out.json"
-    GCSIM_SAMPLE_FILE_PATH = PROJECT_ROOT / "gcsim_output" / "gcsim_sample.json"
-    CONFIG_FILE_PATH = PROJECT_ROOT / "gcsim_config" / "config.txt"
-    CONFIG_HEADER_FILE_PATH = PROJECT_ROOT / "gcsim_config" / "config_header.txt"
-    
+    GCSIM_EXE_PATH = PROJECT_ROOT / "bin" / "gcsim.exe"
+    GCSIM_OUT_FOLDER_PATH = PROJECT_ROOT / "gcsim_output"
+    GCSIM_OUT_FILE_BASENAME = "gcsim_out.json"
+    GCSIM_SAMPLE_FILE_BASENAME = "gcsim_sample.json"
+
+    CONFIG_FOLDER_PATH = PROJECT_ROOT / "gcsim_config"
+    CONFIG_HEADER_FILE_PATH = CONFIG_FOLDER_PATH / "config_header.txt"
+    CONFIG_FILE_BASENAME = "config.txt"
     
     DEFAULT_OPTIONS = {
         "iteration": 10,
@@ -48,6 +50,7 @@ class GcsimEnv:
         "<start>": 1,
     }
     
+    instance_cnt = 0
     
     def __init__(self, action_list: list[str], debug: bool=False, debug_period: int=10, options: dict | None=None, target: dict | None=None) -> None:
         self.debug = debug
@@ -58,14 +61,25 @@ class GcsimEnv:
         self.n_actions = self.get_n_actions()
         self.n_special_actions = self.get_n_special_actions()
         
-        self.config_file = open(self.CONFIG_FILE_PATH, "r+")
-        with open(self.CONFIG_HEADER_FILE_PATH, "r") as config_header_file:
-            self.config_header_content = config_header_file.read()
-        
         self.seed = None
         self.options = options or self.DEFAULT_OPTIONS
         self.enemy = target or self.DEFAULT_TARGET
         self.config_file_write_position = None
+
+        self.id = GcsimEnv.instance_cnt
+        GcsimEnv.instance_cnt += 1
+        self.config_file_path = self.CONFIG_FOLDER_PATH / str(self.id) / self.CONFIG_FILE_BASENAME
+        self.gcsim_out_file_path = self.GCSIM_OUT_FOLDER_PATH / str(self.id) / self.GCSIM_OUT_FILE_BASENAME
+        self.gcsim_sample_file_path = self.GCSIM_OUT_FOLDER_PATH / str(self.id) / self.GCSIM_SAMPLE_FILE_BASENAME
+        
+        self.config_file_path.parent.mkdir(parents=True, exist_ok=True)
+        self.gcsim_out_file_path.parent.mkdir(parents=True, exist_ok=True)
+        self.gcsim_sample_file_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        self.config_file_path.touch(exist_ok=True)
+        self.config_file = open(self.config_file_path, "r+")
+        with open(self.CONFIG_HEADER_FILE_PATH, "r") as config_header_file:
+            self.config_header_content = config_header_file.read()
 
     @abstractmethod
     def reset(self) -> GcsimState:
@@ -102,7 +116,7 @@ class GcsimEnv:
         pass
 
     def _analyze_gcsim_out(self) -> tuple[float, float]:
-        with open(self.GCSIM_OUT_FILE_PATH, "r") as gcsim_out_file:
+        with open(self.gcsim_out_file_path, "r") as gcsim_out_file:
             data = json.load(gcsim_out_file)
 
         cd_duration, rps = 0, 0
@@ -115,7 +129,7 @@ class GcsimEnv:
         return cd_duration, rps
     
     def _analyze_gcsim_sample(self) -> tuple[list[int], list[float]]:
-        with open(self.GCSIM_SAMPLE_FILE_PATH, "r") as gcsim_sample_file:
+        with open(self.gcsim_sample_file_path, "r") as gcsim_sample_file:
             data = json.load(gcsim_sample_file)
 
         # when does the action happen, damage partitioned by each action
@@ -135,7 +149,7 @@ class GcsimEnv:
     def _run_gcsim(self) -> tuple[float, float, float]:        
         try:
             result = subprocess.run(
-                [self.GCSIM_PATH, '-c', self.CONFIG_FILE_PATH, '-out', self.GCSIM_OUT_FILE_PATH, '-sample', self.GCSIM_SAMPLE_FILE_PATH, '-seed', str(self.seed)], 
+                [self.GCSIM_EXE_PATH, '-c', self.config_file_path, '-out', self.gcsim_out_file_path, '-sample', self.gcsim_sample_file_path, '-seed', str(self.seed)], 
                 check=True, 
                 capture_output=True, 
                 text=True
