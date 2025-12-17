@@ -17,12 +17,14 @@ class ActorCritic(keras.Model):
             output_mode='one_hot'
         )
         self.one_hot_layer_2 = OneHotWithMasking(depth=n_actions+n_special_actions)
+        self.masking = layers.Masking(mask_value=0)
         
         self.concat        = layers.Concatenate()
         self.flatten_layer = layers.Flatten()
         self.embedding     = layers.Embedding(input_dim=n_actions+n_special_actions, output_dim=3, name='action_embedding', mask_zero=True)
         self.lstm_1        = layers.LSTM(16, return_sequences=True)
         self.lstm_2        = layers.LSTM(64)
+        self.lstm_3        = layers.LSTM(16)
         self.dense_1       = layers.Dense(32, activation='relu')
         self.conv_1d       = layers.Conv1D(filters=4, kernel_size=3, activation='relu')
         self.max_pooling   = layers.MaxPooling1D(pool_size=2)
@@ -50,7 +52,10 @@ class ActorCritic(keras.Model):
         # return self._call_ver_3(action_seq)
         # return self._call_ver_4(action_seq)
         # return self._call_ver_5(action_seq)
-        return self._call_ver_6(action_seq, duration_left)
+        # return self._call_ver_6(action_seq, duration_left)
+        # return self._call_ver_7(action_seq, action_frames, duration_left)
+        # return self._call_ver_8(action_seq, action_frames, duration_left)
+        return self._call_ver_9(action_seq, action_frames, duration_left)
     
     def _call_ver_1(self, inputs):
         one_hot_features = self.one_hot_layer_1(inputs)
@@ -155,6 +160,39 @@ class ActorCritic(keras.Model):
 
         return actor, critic
     
+    def _call_ver_8(self, action_seq, action_frames, duration_left):
+        one_hot_features = self.one_hot_layer_2(action_seq)        
+        lstm_features    = self.lstm_2(one_hot_features)
+
+        paddings = [[0, 0], [0, self.seq_len - tf.shape(action_frames)[1]]]
+        action_frames = tf.pad(action_frames, paddings, "CONSTANT")
+
+        concat_features = self.concat([lstm_features, duration_left, action_frames[:, 1:]])
+
+        actor = self.actor_hidden_1(concat_features)
+        actor = self.actor_output(actor)
+
+        critic = self.critic_hidden_1(concat_features)
+        critic = self.critic_output(critic)
+
+        return actor, critic
+    
+    def _call_ver_9(self, action_seq, action_frames, duration_left):
+        action_seq = self.one_hot_layer_2(action_seq)        
+        lstm_features_1 = self.lstm_2(action_seq)
+
+        action_frames = self.masking(tf.expand_dims(action_frames, axis=-1))
+        lstm_features_2 = self.lstm_3(action_frames)
+
+        concat_features = self.concat([lstm_features_1, lstm_features_2, duration_left])
+
+        actor = self.actor_hidden_1(concat_features)
+        actor = self.actor_output(actor)
+
+        critic = self.critic_hidden_1(concat_features)
+        critic = self.critic_output(critic)
+
+        return actor, critic
 
 # Example usage
 if __name__ == "__main__":
