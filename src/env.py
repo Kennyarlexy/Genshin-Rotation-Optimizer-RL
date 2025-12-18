@@ -55,6 +55,7 @@ class GcsimEnv:
     def __init__(self, action_list: list[str], debug: bool=False, debug_period: int=10, options: dict | None=None, target: dict | None=None) -> None:
         self.debug = debug
         self.debug_period = debug_period
+        self.done = False
 
         self.action_list = action_list
         self.episode_count = 0
@@ -87,6 +88,7 @@ class GcsimEnv:
         Reset the environment to an initial state and return the initial observation.
         """
         
+        self.done = False
         self.episode_count += 1
         self.seed = np.random.randint(100_000_000, 999_999_999)
         self._reset_config_file()
@@ -234,6 +236,9 @@ class GcsimV1(GcsimEnv):
     
     @override
     def step(self, action: int) -> tuple[GcsimState, float, bool]:
+        if self.done:
+            return copy.deepcopy(self.state), 0.0, True
+        
         self.step_count += 1
         self.state.action_seq[self.step_count] = action + self.n_special_actions
         done = self.step_count == self.steps_per_episode
@@ -243,6 +248,7 @@ class GcsimV1(GcsimEnv):
         if done:
             _, _, dps = self._run_gcsim()
             reward = self._compute_reward(dps)
+            self.done = True
         
         return copy.deepcopy(self.state), reward, done
 
@@ -297,7 +303,10 @@ class GcsimV2(GcsimEnv):
         return copy.deepcopy(self.state)
         
     @override
-    def step(self, action: int) -> tuple[GcsimState, float, bool]:
+    def step(self, action: int) -> tuple[GcsimState, float, bool]:        
+        if self.done:
+            return copy.deepcopy(self.state), 0.0, True
+        
         self._update_config_file(action)
         _, _, _ = self._run_gcsim()
         action_frames, damages = self._analyze_gcsim_sample()
@@ -311,6 +320,7 @@ class GcsimV2(GcsimEnv):
         done = (action_frames[-1] == self.last_action_frame)
         if done:
             reward = damages[-1]
+            self.done = True
         elif self.step_count > 1:
             reward = damages[-2]
         
