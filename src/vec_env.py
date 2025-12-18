@@ -9,7 +9,7 @@ class SyncVectorGcsimEnv:
         self.envs: list[GcsimEnv] = [fn() for _ in range(n_envs)]
         self.n_envs = n_envs
         
-    def reset(self) -> np.ndarray:
+    def reset(self) -> GcsimState:
         states = [env.reset() for env in self.envs]
         return self._stack_states(states)
 
