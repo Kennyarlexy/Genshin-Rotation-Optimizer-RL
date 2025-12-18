@@ -52,10 +52,11 @@ class GcsimEnv:
     
     instance_cnt = 0
     
-    def __init__(self, action_list: list[str], debug: bool=False, debug_period: int=10, options: dict | None=None, target: dict | None=None) -> None:
+    def __init__(self, action_list: list[str], debug: bool=False, debug_period: int=10, options: dict | None=None, target: dict | None=None, auto_reset: bool=False) -> None:
         self.debug = debug
         self.debug_period = debug_period
         self.done = False
+        self.auto_reset = auto_reset
 
         self.action_list = action_list
         self.episode_count = 0
@@ -236,8 +237,11 @@ class GcsimV1(GcsimEnv):
     
     @override
     def step(self, action: int) -> tuple[GcsimState, float, bool]:
-        if self.done:
+        if self.done and not self.auto_reset:
             return copy.deepcopy(self.state), 0.0, True
+        
+        if self.done:
+            self.reset()
         
         self.step_count += 1
         self.state.action_seq[self.step_count] = action + self.n_special_actions
@@ -304,8 +308,11 @@ class GcsimV2(GcsimEnv):
         
     @override
     def step(self, action: int) -> tuple[GcsimState, float, bool]:        
-        if self.done:
+        if self.done and not self.auto_reset:
             return copy.deepcopy(self.state), 0.0, True
+        
+        if self.done:
+            self.reset()
         
         self._update_config_file(action)
         _, _, _ = self._run_gcsim()
