@@ -29,8 +29,10 @@ class SyncVectorGcsimEnv:
         batch_action_frames = None
         if state_list[0].action_frames is not None:
             batch_action_frames = np.stack([s.action_frames for s in state_list])
-            
-        batch_duration_left = np.array([s.duration_left for s in state_list])
+        
+        batch_duration_left = None
+        if state_list[0].duration_left is not None:
+            batch_duration_left = np.array([s.duration_left for s in state_list])
 
         return GcsimState(
             action_seq=batch_action_seq, 
