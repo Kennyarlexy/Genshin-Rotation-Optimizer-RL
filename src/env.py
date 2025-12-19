@@ -205,8 +205,8 @@ class GcsimV1(GcsimEnv):
     GcsimEnv with fixed number of steps per episode
     """
 
-    def __init__(self, action_list: list[str], steps_per_episode=30, debug: bool=False, debug_period: int=10, options: dict | None=None, target: dict | None=None):
-        super().__init__(action_list, debug, debug_period, options, target)
+    def __init__(self, action_list: list[str], steps_per_episode=30, debug: bool=False, debug_period: int=10, options: dict | None=None, target: dict | None=None, auto_reset: bool=False):
+        super().__init__(action_list, debug, debug_period, options, target, auto_reset)
 
         self.steps_per_episode = steps_per_episode
         self.state = GcsimState(np.zeros((self.steps_per_episode + 1,), dtype=np.int32))
@@ -280,12 +280,12 @@ class GcsimV2(GcsimEnv):
 
     MAX_SEQ_LEN = 150 # this shouldn't be exceeded in any case
     
-    def __init__(self, action_list: list[str], duration: float=60.0, debug: bool=False, debug_period: int=10, options: dict | None=None, target: dict | None=None):
+    def __init__(self, action_list: list[str], duration: float=60.0, debug: bool=False, debug_period: int=10, options: dict | None=None, target: dict | None=None, auto_reset: bool=False):
         options = options or self.DEFAULT_OPTIONS
         target = target or self.DEFAULT_TARGET
         options["duration"] = duration
 
-        super().__init__(action_list, debug, debug_period, options or self.DEFAULT_OPTIONS, target or self.DEFAULT_TARGET)
+        super().__init__(action_list, debug, debug_period, options or self.DEFAULT_OPTIONS, target or self.DEFAULT_TARGET, auto_reset)
         
         self.duration = duration
         self.state = GcsimState(np.zeros((self.MAX_SEQ_LEN,), dtype=np.int32), np.zeros((self.MAX_SEQ_LEN,), dtype=np.float32), self.duration)
