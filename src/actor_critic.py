@@ -17,7 +17,7 @@ class ActorCritic(keras.Model):
             output_mode='one_hot'
         )
         self.one_hot_layer_2 = OneHotWithMasking(depth=n_actions+n_special_actions)
-        self.masking = layers.Masking(mask_value=0)
+        self.masking = layers.Masking(mask_value=-1)
         
         self.concat        = layers.Concatenate()
         self.flatten_layer = layers.Flatten()

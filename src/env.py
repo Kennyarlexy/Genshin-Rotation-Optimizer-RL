@@ -288,6 +288,7 @@ class GcsimV2(GcsimEnv):
         
         self.duration = duration
         self.state = GcsimState(np.zeros((self.MAX_SEQ_LEN,), dtype=np.int32), np.zeros((self.MAX_SEQ_LEN,), dtype=np.float32), 1.0)
+        self.state.action_frames[1:] = -1
         self.state.action_seq[0] = self.SPECIAL_ACTIONS["<start>"]
         self.step_count = 0
 
@@ -299,7 +300,7 @@ class GcsimV2(GcsimEnv):
 
         self.step_count = 0
         self.state.action_seq[1:] = self.SPECIAL_ACTIONS["<none>"]
-        self.state.action_frames[1:] = 0
+        self.state.action_frames[1:] = -1
         self.state.duration_left = 1 # normalized (full duration is 1)
         self.last_action_frame = None
 
