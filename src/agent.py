@@ -2,6 +2,7 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 import keras
 import numpy as np
+import traceback
 from typing import Any
 from custom_data_structure import FastDeque
 from pathlib import Path
@@ -229,10 +230,14 @@ if __name__ == "__main__":
     action_list = ["alhaitham skill", "alhaitham attack", "furina skill", "kuki skill"]
     
     env = SyncVectorGcsimEnv(lambda: GcsimV2(action_list, debug=False, auto_reset=True), n_envs=8)
-    agent = Agent(env, gamma=1.0, entropy_coeff=0.1, critic_loss_coeff=0.5, alpha=5e-5, n_step=10)
-    # agent.load(WEIGHTS_H5_PATH, FINAL_RETURN_HISTORY_PATH)
     
-    agent.learn(100)
-    agent.save(WEIGHTS_H5_PATH, FINAL_RETURN_HISTORY_PATH)
+    try:
+        agent = Agent(env, gamma=1.0, entropy_coeff=0.1, critic_loss_coeff=0.5, alpha=5e-5, n_step=10)
+        agent.load(WEIGHTS_H5_PATH, FINAL_RETURN_HISTORY_PATH)
+        agent.learn(100)
+        agent.save(WEIGHTS_H5_PATH, FINAL_RETURN_HISTORY_PATH)
+    except:
+        traceback.print_exc() 
 
     env.close()
+    print("Training finished")
