@@ -1,9 +1,13 @@
 import tensorflow as tf
+import tensorflow_probability as tfp
 import keras
 import numpy as np
+from typing import Any
+from custom_data_structure import FastDeque
 from pathlib import Path
 from actor_critic import ActorCritic
 from env import GcsimEnv, GcsimV1, GcsimV2, GcsimState
+from vec_env import SyncVectorGcsimEnv
 from tqdm import tqdm
 from custom_plot import plot_time_series
 
@@ -11,7 +15,7 @@ SCRIPT_PATH = Path(__file__)
 PROJECT_ROOT = SCRIPT_PATH.parent.parent
 
 class Agent:
-    def __init__(self, env: GcsimEnv, gamma=1.0, alpha=6e-3, n_step = 1, entropy_coeff=0.01, critic_loss_coeff=0.5):
+    def __init__(self, env: SyncVectorGcsimEnv, gamma=1.0, alpha=6e-3, n_step = 1, entropy_coeff=0.01, critic_loss_coeff=0.5):
         self.env = env
         self.gamma = tf.constant(gamma, dtype=tf.float32)
         self.alpha = tf.constant(alpha, dtype=tf.float32)
@@ -19,10 +23,10 @@ class Agent:
         self.entropy_coeff = tf.constant(entropy_coeff, dtype=tf.float32)
         self.critic_loss_coeff = tf.constant(critic_loss_coeff, dtype=tf.float32)
         
-        self.seq_len = self.env.get_seq_len()
-        self.n_actions = self.env.get_n_actions()
+        self.seq_len = self.env.envs[0].get_seq_len()
+        self.n_actions = self.env.envs[0].get_n_actions()
 
-        n_special_actions = self.env.get_n_special_actions()
+        n_special_actions = self.env.envs[0].get_n_special_actions()
         self.actor_critic = ActorCritic(self.seq_len, self.n_actions, n_special_actions)
         self.optimizer = keras.optimizers.Adam(learning_rate=alpha)
 
@@ -68,12 +72,16 @@ class Agent:
         action, _, _, _ = self._predict(state)
         return action
 
-    def _predict(self, state: GcsimState):
-        action_seq = tf.expand_dims(tf.convert_to_tensor(state.action_seq, dtype=tf.int32), axis=0)
+    def _predict(self, state: GcsimState) -> tuple[tf.Tensor, Any, tf.Tensor, tf.Tensor]:
+        action_seq = tf.convert_to_tensor(state.action_seq, dtype=tf.int32)
+
         action_frames = None
         if state.action_frames is not None:
-            action_frames = tf.expand_dims(tf.convert_to_tensor(state.action_frames, dtype=tf.float32), axis=0)
-        duration_left = tf.convert_to_tensor([[state.duration_left or 0]], dtype=tf.float32)
+            action_frames = tf.convert_to_tensor(state.action_frames, dtype=tf.float32)
+        
+        duration_left = None
+        if state.duration_left is not None:
+            duration_left = tf.expand_dims(tf.convert_to_tensor(state.duration_left, dtype=tf.float32), axis=-1)
         
         prob_distribution, state_value = self.actor_critic(
             {
@@ -82,17 +90,13 @@ class Agent:
                 "duration_left": duration_left,
             }
         )
-        prob_distribution = tf.squeeze(prob_distribution)
-        state_value = tf.squeeze(state_value)
 
-        sampled_action_index = np.random.choice(self.n_actions, p=prob_distribution.numpy())
-        action = sampled_action_index
+        dist = tfp.distributions.Categorical(probs=prob_distribution)
+        action = dist.sample()
 
-        action_prob = prob_distribution[sampled_action_index]
+        return action, dist, state_value, prob_distribution
 
-        return action, action_prob, state_value, prob_distribution
-
-    def learn(self, n_episodes=1000):
+    def learn_deprecated(self, n_episodes=1000):
         for episode in range(self.n_loaded_episodes + 1, self.n_loaded_episodes + n_episodes + 1):
             print("episode", episode)
             
@@ -170,18 +174,65 @@ class Agent:
             if episode % 10 == 0:
                 window = episode // 100 + 10
                 plot_time_series(self.cumulative_reward_history, "reward_per_episode.png", window=window)
+
+    def learn(self, steps=1000):
+        states = FastDeque(self.n_step + 1)
+        actions = FastDeque(self.n_step)
+        rewards = FastDeque(self.n_step)
+        dones = FastDeque(self.n_step)
+
+        states.push_back(self.env.reset())
+        for step in range(1, steps + 1):
+            action, _, _, _ = self._predict(states[-1])
+            action = action.numpy().tolist()
+            state_, reward, done = self.env.step(action)
+            states.push_back(state_)
+            actions.push_back(action)
+            rewards.push_back(reward)
+            dones.push_back(done)
+            
+            if step >= self.n_step:
+                state: GcsimState = states.pop_front()
+                action: list[int] = actions.pop_front()
+                
+                _, _, state_value_, _ = self._predict(states[-1])
+                G_t = tf.stop_gradient(tf.squeeze(state_value_, axis=-1))
+                for t in reversed(range(self.n_step)):
+                    G_t = rewards[t] + self.gamma * G_t * (1 - dones[t])
+
+                rewards.pop_front()
+                dones.pop_front()
+
+                with tf.GradientTape() as tape:
+                    _, dist, state_value, prob_distribution = self._predict(state)
+                    
+                    log_prob = dist.log_prob(action)
+
+                    state_value = tf.squeeze(state_value, axis=-1)
+                    advantage   = tf.stop_gradient(G_t - state_value)
+                    entropy     = -1 * tf.reduce_sum(prob_distribution * tf.math.log(prob_distribution + 1e-10))
+                    actor_loss  = -1 * tf.reduce_sum(advantage * log_prob)
+                    critic_loss = tf.reduce_sum(tf.square(G_t - state_value))
+                    total_loss  = (actor_loss + self.critic_loss_coeff * critic_loss - self.entropy_coeff * entropy) / self.env.n_envs
+                    # print(total_loss)
+
+                grads = tape.gradient(total_loss, self.actor_critic.trainable_variables)
+                self.optimizer.apply_gradients(zip(grads, self.actor_critic.trainable_variables))
+
+                print(f"step {step - self.n_step + 1}  |  loss {total_loss}")
+
         
 if __name__ == "__main__":
     WEIGHTS_H5_PATH = PROJECT_ROOT / 'models' / 'actor_critic.weights.h5'
     FINAL_RETURN_HISTORY_PATH = PROJECT_ROOT / 'var' / 'final_return_history.txt'
 
-    action_list = ["alhaitham attack", "alhaitham skill", "furina skill", "kuki skill"]
+    action_list = ["alhaitham skill", "alhaitham attack", "furina skill", "kuki skill"]
     
-    env = GcsimV2(action_list, debug=False)
-    agent = Agent(env, gamma=1.0, entropy_coeff=0.1, critic_loss_coeff=0.5, alpha=1e-4, n_step=5)
+    env = SyncVectorGcsimEnv(lambda: GcsimV2(action_list, debug=False, auto_reset=True), n_envs=8)
+    agent = Agent(env, gamma=1.0, entropy_coeff=0.1, critic_loss_coeff=0.5, alpha=5e-5, n_step=10)
     # agent.load(WEIGHTS_H5_PATH, FINAL_RETURN_HISTORY_PATH)
     
-    agent.learn(500)
+    agent.learn(100)
     agent.save(WEIGHTS_H5_PATH, FINAL_RETURN_HISTORY_PATH)
 
     env.close()
