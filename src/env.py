@@ -287,7 +287,7 @@ class GcsimV2(GcsimEnv):
         super().__init__(action_list, debug, debug_period, options or self.DEFAULT_OPTIONS, target or self.DEFAULT_TARGET, auto_reset)
         
         self.duration = duration
-        self.state = GcsimState(np.zeros((self.MAX_SEQ_LEN,), dtype=np.int32), np.zeros((self.MAX_SEQ_LEN,), dtype=np.float32), self.duration)
+        self.state = GcsimState(np.zeros((self.MAX_SEQ_LEN,), dtype=np.int32), np.zeros((self.MAX_SEQ_LEN,), dtype=np.float32), 1.0)
         self.state.action_seq[0] = self.SPECIAL_ACTIONS["<start>"]
         self.step_count = 0
 
