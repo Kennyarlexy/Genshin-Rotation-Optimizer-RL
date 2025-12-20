@@ -240,9 +240,6 @@ class GcsimV1(GcsimEnv):
         if self.done and not self.auto_reset:
             return copy.deepcopy(self.state), 0.0, True
         
-        if self.done:
-            self.reset()
-        
         self.step_count += 1
         self.state.action_seq[self.step_count] = action + self.n_special_actions
         done = self.step_count == self.steps_per_episode
@@ -253,6 +250,8 @@ class GcsimV1(GcsimEnv):
             _, _, dps = self._run_gcsim()
             reward = self._compute_reward(dps)
             self.done = True
+            if self.auto_reset:
+                self.reset()
         
         return copy.deepcopy(self.state), reward, done
 
@@ -311,9 +310,6 @@ class GcsimV2(GcsimEnv):
         if self.done and not self.auto_reset:
             return copy.deepcopy(self.state), 0.0, True
         
-        if self.done:
-            self.reset()
-        
         self._update_config_file(action)
         _, _, _ = self._run_gcsim()
         action_frames, damages = self._analyze_gcsim_sample()
@@ -328,6 +324,8 @@ class GcsimV2(GcsimEnv):
         if done:
             reward = damages[-1]
             self.done = True
+            if self.auto_reset:
+                self.reset() # affect self.state under the hood
         elif self.step_count > 1:
             reward = damages[-2]
         
