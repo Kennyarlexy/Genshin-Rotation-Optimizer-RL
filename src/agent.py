@@ -183,7 +183,8 @@ class Agent:
         dones = FastDeque(self.n_step)
 
         states.push_back(self.env.reset())
-        for step in range(1, steps + 1):
+        # to learn for "steps" number of times, we need steps + self.n_step - 1 interactions
+        for step in range(1, steps + self.n_step):
             action, _, _, _ = self._predict(states[-1])
             action = action.numpy().tolist()
             state_, reward, done = self.env.step(action)
