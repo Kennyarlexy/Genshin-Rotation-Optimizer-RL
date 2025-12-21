@@ -70,10 +70,10 @@ class Agent:
                 f.write(str(value) + "\n")
     
     def predict(self, state: GcsimState):
-        action, _, _ = self._predict(state)
-        return action
+        action_prob_dist, _ = self._predict(state)
+        return action_prob_dist.sample()
 
-    def _predict(self, state: GcsimState) -> tuple[tf.Tensor, Any, tf.Tensor]:
+    def _predict(self, state: GcsimState) -> tuple[Any, tf.Tensor]:
         action_seq = tf.convert_to_tensor(state.action_seq, dtype=tf.int32)
 
         action_frames = None
@@ -84,7 +84,7 @@ class Agent:
         if state.duration_left is not None:
             duration_left = tf.expand_dims(tf.convert_to_tensor(state.duration_left, dtype=tf.float32), axis=-1)
         
-        prob_distribution, state_value = self.actor_critic(
+        action_prob_dist, state_value = self.actor_critic(
             {
                 "action_seq": action_seq,
                 "action_frames": action_frames,
@@ -92,10 +92,9 @@ class Agent:
             }
         )
 
-        dist = tfp.distributions.Categorical(probs=prob_distribution)
-        action = dist.sample()
+        action_prob_dist = tfp.distributions.Categorical(probs=action_prob_dist)
 
-        return action, dist, state_value
+        return action_prob_dist, state_value
 
     def learn_deprecated(self, n_episodes=1000):
         for episode in range(self.n_loaded_episodes + 1, self.n_loaded_episodes + n_episodes + 1):
@@ -185,8 +184,9 @@ class Agent:
         states.push_back(self.env.reset())
         # to learn for "steps" number of times, we need steps + self.n_step - 1 interactions
         for step in range(1, steps + self.n_step):
-            action, _, _= self._predict(states[-1])
-            action = action.numpy().tolist()
+            action_prob_dist, _ = self._predict(states[-1])
+
+            action = action_prob_dist.sample().numpy().tolist()
             state_, reward, done = self.env.step(action)
             states.push_back(state_)
             actions.push_back(action)
@@ -197,7 +197,7 @@ class Agent:
                 state: GcsimState = states.pop_front()
                 action: list[int] = actions.pop_front()
                 
-                _, _, state_value_ = self._predict(states[-1])
+                _, state_value_ = self._predict(states[-1])
                 G_t = tf.stop_gradient(tf.squeeze(state_value_, axis=-1))
                 for t in reversed(range(self.n_step)):
                     G_t = rewards[t] + self.gamma * G_t * (1 - dones[t])
@@ -206,14 +206,13 @@ class Agent:
                 dones.pop_front()
 
                 with tf.GradientTape() as tape:
-                    _, dist, state_value = self._predict(state)
+                    action_prob_dist, state_value = self._predict(state)
 
-                    prob_distribution = dist.probs
-                    log_prob = dist.log_prob(action)
+                    log_prob = action_prob_dist.log_prob(action)
 
                     state_value = tf.squeeze(state_value, axis=-1)
                     advantage   = tf.stop_gradient(G_t - state_value)
-                    entropy     = -1 * tf.reduce_sum(prob_distribution * tf.math.log(prob_distribution + 1e-10))
+                    entropy     = tf.reduce_sum(action_prob_dist.entropy())
                     actor_loss  = -1 * tf.reduce_sum(advantage * log_prob)
                     critic_loss = tf.reduce_sum(tf.square(G_t - state_value))
                     total_loss  = (actor_loss + self.critic_loss_coeff * critic_loss - self.entropy_coeff * entropy) / self.env.n_envs
