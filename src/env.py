@@ -139,7 +139,7 @@ class GcsimEnv:
         action_frames, damages = [], []
         for log in data["logs"]:
             is_real_action_event = (log["event"] == "action") and ("action" in log["logs"]) and (log["logs"]["action"] in self.ACTION_TYPES)
-            is_damage_event      = (log["event"] == "damage")
+            is_damage_event      = (log["event"] == "damage") and ("self damage" not in log["logs"]["abil"])
 
             if is_real_action_event:
                 action_frames.append(log["frame"])
@@ -312,7 +312,7 @@ class GcsimV2(GcsimEnv):
             return copy.deepcopy(self.state), 0.0, True
         
         self._update_config_file(action)
-        _, _, _ = self._run_gcsim()
+        total_damage, _, _ = self._run_gcsim()
         action_frames, damages = self._analyze_gcsim_sample()
                 
         self.step_count += 1
@@ -323,6 +323,8 @@ class GcsimV2(GcsimEnv):
         reward = 0.0 
         done = (action_frames[-1] == self.last_action_frame)
         self.last_action_frame = action_frames[-1]
+
+        assert abs(sum(damages) - total_damage) < 1.0, "damage from running the sim vs obtained from sample is different"
         if done:
             reward = damages[-1]
             self.done = True
