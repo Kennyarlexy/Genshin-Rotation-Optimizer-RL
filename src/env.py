@@ -322,6 +322,7 @@ class GcsimV2(GcsimEnv):
 
         reward = 0.0 
         done = (action_frames[-1] == self.last_action_frame)
+        self.last_action_frame = action_frames[-1]
         if done:
             reward = damages[-1]
             self.done = True
@@ -331,8 +332,6 @@ class GcsimV2(GcsimEnv):
             reward = damages[-2]
         
         reward /= 1e6
-        
-        self.last_action_frame = action_frames[-1]
         
         return copy.deepcopy(self.state), reward, done
 
