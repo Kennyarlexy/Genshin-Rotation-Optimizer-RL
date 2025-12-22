@@ -69,8 +69,12 @@ class Agent:
                 value = value
                 f.write(str(value) + "\n")
     
-    def predict(self, state: GcsimState):
-        action_prob_dist, _ = self._forward(state)
+    def select_action(self, state: GcsimState, greedy: bool=False):
+        inputs = self._unpack_state(state)
+        action_prob_dist, _ = self._forward(inputs)
+        if greedy:
+            return action_prob_dist.mode()
+        
         return action_prob_dist.sample()
 
     def _forward(self, inputs: dict) -> tuple[Any, tf.Tensor]:
