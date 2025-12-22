@@ -16,18 +16,21 @@ SCRIPT_PATH = Path(__file__)
 PROJECT_ROOT = SCRIPT_PATH.parent.parent
 
 class Agent:
-    def __init__(self, env: SyncVectorGcsimEnv, gamma=1.0, alpha=6e-3, n_step = 1, entropy_coeff=0.01, critic_loss_coeff=0.5):
-        self.env = env
+    def __init__(self, train_env: SyncVectorGcsimEnv | None=None, eval_env: SyncVectorGcsimEnv | None=None, gamma=1.0, alpha=6e-3, n_step = 1, entropy_coeff=0.01, critic_loss_coeff=0.5, eval_freq: int=100, n_eval_episodes: int=10):
+        self.train_env = train_env
+        self.eval_env = eval_env
         self.gamma = tf.constant(gamma, dtype=tf.float32)
         self.alpha = tf.constant(alpha, dtype=tf.float32)
         self.n_step = n_step
         self.entropy_coeff = tf.constant(entropy_coeff, dtype=tf.float32)
         self.critic_loss_coeff = tf.constant(critic_loss_coeff, dtype=tf.float32)
+        self.eval_freq = eval_freq
+        self.n_eval_episodes = n_eval_episodes
         
-        self.seq_len = self.env.envs[0].get_seq_len()
-        self.n_actions = self.env.envs[0].get_n_actions()
+        self.seq_len = self.train_env.envs[0].get_seq_len()
+        self.n_actions = self.train_env.envs[0].get_n_actions()
 
-        n_special_actions = self.env.envs[0].get_n_special_actions()
+        n_special_actions = self.train_env.envs[0].get_n_special_actions()
         self.actor_critic = ActorCritic(self.seq_len, self.n_actions, n_special_actions)
         self.optimizer = keras.optimizers.Adam(learning_rate=alpha)
 
@@ -106,19 +109,22 @@ class Agent:
 
         return unpacked_state
 
-    def learn(self, steps=1000):
+    def learn(self, steps=1000, evaluate=False):
+        if self.train_env is None:
+            raise Exception("No environment to learn from, pass in train_env when constructing agent to learn.")
+        
         states = FastDeque(self.n_step + 1)
         actions = FastDeque(self.n_step)
         rewards = FastDeque(self.n_step)
         dones = FastDeque(self.n_step)
 
-        states.push_back(self.env.reset())
+        states.push_back(self.train_env.reset())
         # to learn for "steps" number of times, we need steps + self.n_step - 1 interactions
         for step in range(1, steps + self.n_step):
             action_prob_dist, _ = self._forward(self._unpack_state(states[-1]))
 
             action = action_prob_dist.sample()
-            state_, reward, done = self.env.step(action)
+            state_, reward, done = self.train_env.step(action)
             states.push_back(state_)
             actions.push_back(action)
             rewards.push_back(reward)
@@ -139,6 +145,11 @@ class Agent:
                 print(f"step {step - self.n_step + 1}  |  ", end="")
                 self._update_network(self._unpack_state(state), action, G_t)
 
+                if evaluate and (step - self.n_step + 1) % self.eval_freq == 0:
+                    print("Paused for evaluation...")
+                    self.evaluate()
+                    self.evaluate(greedy=True)
+
     @tf.function
     def _update_network(self, unpacked_state, action, G_t):
         with tf.GradientTape() as tape:
@@ -151,11 +162,34 @@ class Agent:
             entropy     = tf.reduce_sum(action_prob_dist.entropy())
             actor_loss  = -1 * tf.reduce_sum(advantage * log_prob)
             critic_loss = tf.reduce_sum(tf.square(G_t - state_value))
-            total_loss  = (actor_loss + self.critic_loss_coeff * critic_loss - self.entropy_coeff * entropy) / self.env.n_envs
+            total_loss  = (actor_loss + self.critic_loss_coeff * critic_loss - self.entropy_coeff * entropy) / self.train_env.n_envs
 
             tf.print("loss", total_loss)
         grads = tape.gradient(total_loss, self.actor_critic.trainable_variables)
         self.optimizer.apply_gradients(zip(grads, self.actor_critic.trainable_variables))
+
+    def evaluate(self, greedy=False):
+        if self.eval_env is None:
+            raise Exception("No environment to evaluate from, pass in eval_env when constructing agent to evaluate.")
+        
+        if self.eval_env.n_envs > 1:
+            raise Exception("Can only evaluate on single instance of environment when parallelized.")
+        
+        total_reward = 0
+        for _ in range(self.n_eval_episodes):
+            state = self.eval_env.reset()
+            done = False
+            while not done:
+                action = self.select_action(state, greedy=greedy)
+                state, _reward, _done = self.eval_env.step(action)
+                total_reward += np.squeeze(_reward)
+                done = np.squeeze(_done)
+
+        avg_reward = total_reward / self.n_eval_episodes
+
+        print(f"average reward for {self.n_eval_episodes} episodes run{' (greedy)' if greedy else ''}: {avg_reward}")
+        
+        return avg_reward
 
         
 if __name__ == "__main__":
@@ -164,15 +198,23 @@ if __name__ == "__main__":
 
     action_list = ["alhaitham skill", "alhaitham attack", "furina skill", "kuki skill"]
     
-    env = SyncVectorGcsimEnv(lambda: GcsimV2(action_list, debug=False, auto_reset=True), n_envs=6)
+    train_env = SyncVectorGcsimEnv(lambda: GcsimV2(action_list, debug=False, auto_reset=True), n_envs=6)
+    eval_env  = SyncVectorGcsimEnv(lambda: GcsimV2(action_list, debug=False, auto_reset=False), n_envs=1)
     
     try:
-        agent = Agent(env, gamma=1.0, entropy_coeff=0.1, critic_loss_coeff=0.5, alpha=5e-5, n_step=10)
+        agent = Agent(
+            train_env, eval_env, 
+            gamma=1.0, 
+            entropy_coeff=0.1, 
+            critic_loss_coeff=0.5, 
+            alpha=1e-4, 
+            n_step=7
+        )
         agent.load(WEIGHTS_H5_PATH, FINAL_RETURN_HISTORY_PATH)
-        agent.learn(100)
+        agent.learn(100, evaluate=True)
         agent.save(WEIGHTS_H5_PATH, FINAL_RETURN_HISTORY_PATH)
     except:
         traceback.print_exc() 
 
-    env.close()
+    train_env.close()
     print("Training finished")
