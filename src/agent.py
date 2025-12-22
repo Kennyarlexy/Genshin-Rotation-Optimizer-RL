@@ -70,10 +70,20 @@ class Agent:
                 f.write(str(value) + "\n")
     
     def predict(self, state: GcsimState):
-        action_prob_dist, _ = self._predict(state)
+        action_prob_dist, _ = self._forward(state)
         return action_prob_dist.sample()
 
-    def _predict(self, state: GcsimState) -> tuple[Any, tf.Tensor]:
+    def _forward(self, inputs: dict) -> tuple[Any, tf.Tensor]:
+        action_prob_dist, state_value = self.actor_critic(inputs)
+        action_prob_dist = tfp.distributions.Categorical(probs=action_prob_dist)
+
+        return action_prob_dist, state_value
+    
+    def _unpack_state(self, state: GcsimState) -> dict:
+        """
+        Unpack into dictionary containing tensors with correct shapes for feed forward
+        """
+
         action_seq = tf.convert_to_tensor(state.action_seq, dtype=tf.int32)
 
         action_frames = None
@@ -83,18 +93,14 @@ class Agent:
         duration_left = None
         if state.duration_left is not None:
             duration_left = tf.expand_dims(tf.convert_to_tensor(state.duration_left, dtype=tf.float32), axis=-1)
-        
-        action_prob_dist, state_value = self.actor_critic(
-            {
-                "action_seq": action_seq,
-                "action_frames": action_frames,
-                "duration_left": duration_left,
-            }
-        )
 
-        action_prob_dist = tfp.distributions.Categorical(probs=action_prob_dist)
+        unpacked_state = {
+            "action_seq": action_seq,
+            "action_frames": action_frames,
+            "duration_left": duration_left,
+        }
 
-        return action_prob_dist, state_value
+        return unpacked_state
 
     def learn_deprecated(self, n_episodes=1000):
         for episode in range(self.n_loaded_episodes + 1, self.n_loaded_episodes + n_episodes + 1):
@@ -115,7 +121,7 @@ class Agent:
                 t2 += 1
                 if not done:
                     t1 += 1
-                    action, _, _, _ = self._predict(state)
+                    action, _, _, _ = self._forward(state)
                     
                     state_, reward, done = self.env.step(action)
                     cumulative_reward += reward
@@ -130,7 +136,7 @@ class Agent:
 
                 if t2 >= 1:
                     with tf.GradientTape() as tape:
-                        _, _, state_value, prob_distribution = self._predict(states[t2-1])
+                        _, _, state_value, prob_distribution = self._forward(states[t2-1])
                         if episode % 2 == 0:
                             print(prob_distribution)
                         else:
@@ -143,7 +149,7 @@ class Agent:
                         t3 = min(T, t2 + self.n_step - 1) # point to last reward of the cumulative return
                         G_t = tf.constant(0, dtype=tf.float32)
                         if (t2 + self.n_step - 1 < T):
-                            _, _, state_value_, _ = self._predict(states[(t2 + self.n_step - 1) - 1])
+                            _, _, state_value_, _ = self._forward(states[(t2 + self.n_step - 1) - 1])
                             G_t = tf.stop_gradient(state_value_)
                         
                         for t in range(t3, t2-1, -1):
@@ -184,7 +190,7 @@ class Agent:
         states.push_back(self.env.reset())
         # to learn for "steps" number of times, we need steps + self.n_step - 1 interactions
         for step in range(1, steps + self.n_step):
-            action_prob_dist, _ = self._predict(states[-1])
+            action_prob_dist, _ = self._forward(self._unpack_state(states[-1]))
 
             action = action_prob_dist.sample()
             state_, reward, done = self.env.step(action)
@@ -197,7 +203,7 @@ class Agent:
                 state: GcsimState = states.pop_front()
                 action: tf.Tensor = actions.pop_front()
                 
-                _, state_value_ = self._predict(states[-1])
+                _, state_value_ = self._forward(self._unpack_state(states[-1]))
                 G_t = tf.stop_gradient(tf.squeeze(state_value_, axis=-1))
                 for t in reversed(range(self.n_step)):
                     G_t = rewards[t] + self.gamma * G_t * (1 - dones[t])
@@ -205,22 +211,26 @@ class Agent:
                 rewards.pop_front()
                 dones.pop_front()
 
-                with tf.GradientTape() as tape:
-                    action_prob_dist, state_value = self._predict(state)
+                print(f"step {step - self.n_step + 1}  |  ", end="")
+                self._update_network(self._unpack_state(state), action, G_t)
 
-                    log_prob = action_prob_dist.log_prob(action)
+    @tf.function
+    def _update_network(self, unpacked_state, action, G_t):
+        with tf.GradientTape() as tape:
+            action_prob_dist, state_value = self._forward(unpacked_state)
 
-                    state_value = tf.squeeze(state_value, axis=-1)
-                    advantage   = tf.stop_gradient(G_t - state_value)
-                    entropy     = tf.reduce_sum(action_prob_dist.entropy())
-                    actor_loss  = -1 * tf.reduce_sum(advantage * log_prob)
-                    critic_loss = tf.reduce_sum(tf.square(G_t - state_value))
-                    total_loss  = (actor_loss + self.critic_loss_coeff * critic_loss - self.entropy_coeff * entropy) / self.env.n_envs
+            log_prob = action_prob_dist.log_prob(action)
 
-                grads = tape.gradient(total_loss, self.actor_critic.trainable_variables)
-                self.optimizer.apply_gradients(zip(grads, self.actor_critic.trainable_variables))
+            state_value = tf.squeeze(state_value, axis=-1)
+            advantage   = tf.stop_gradient(G_t - state_value)
+            entropy     = tf.reduce_sum(action_prob_dist.entropy())
+            actor_loss  = -1 * tf.reduce_sum(advantage * log_prob)
+            critic_loss = tf.reduce_sum(tf.square(G_t - state_value))
+            total_loss  = (actor_loss + self.critic_loss_coeff * critic_loss - self.entropy_coeff * entropy) / self.env.n_envs
 
-                print(f"step {step - self.n_step + 1}  |  loss {total_loss}")
+            tf.print("loss", total_loss)
+        grads = tape.gradient(total_loss, self.actor_critic.trainable_variables)
+        self.optimizer.apply_gradients(zip(grads, self.actor_critic.trainable_variables))
 
         
 if __name__ == "__main__":
