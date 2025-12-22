@@ -186,7 +186,7 @@ class Agent:
         for step in range(1, steps + self.n_step):
             action_prob_dist, _ = self._predict(states[-1])
 
-            action = action_prob_dist.sample().numpy().tolist()
+            action = action_prob_dist.sample()
             state_, reward, done = self.env.step(action)
             states.push_back(state_)
             actions.push_back(action)
@@ -195,7 +195,7 @@ class Agent:
             
             if step >= self.n_step:
                 state: GcsimState = states.pop_front()
-                action: list[int] = actions.pop_front()
+                action: tf.Tensor = actions.pop_front()
                 
                 _, state_value_ = self._predict(states[-1])
                 G_t = tf.stop_gradient(tf.squeeze(state_value_, axis=-1))
