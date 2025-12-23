@@ -49,7 +49,7 @@ class Agent:
         dummy_input = {
             "action_seq": tf.zeros((1, self.seq_len)), 
             "action_frames": tf.zeros((1, self.seq_len)), 
-            "relatve_action_frames": tf.zeros((1, self.seq_len)), 
+            "relative_action_frames": tf.zeros((1, self.seq_len)), 
             "duration_left": tf.zeros((1, 1)),
         }
 
