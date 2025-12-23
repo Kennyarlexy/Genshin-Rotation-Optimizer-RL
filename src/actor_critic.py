@@ -55,7 +55,8 @@ class ActorCritic(keras.Model):
         # return self._call_ver_6(action_seq, duration_left)
         # return self._call_ver_7(action_seq, action_frames, duration_left)
         # return self._call_ver_8(action_seq, action_frames, duration_left)
-        return self._call_ver_9(action_seq, action_frames, duration_left)
+        # return self._call_ver_9(action_seq, action_frames, duration_left)
+        return self._call_ver_10(action_seq, action_frames, duration_left)
     
     def _call_ver_1(self, inputs):
         one_hot_features = self.one_hot_layer_1(inputs)
@@ -185,6 +186,28 @@ class ActorCritic(keras.Model):
         lstm_features_2 = self.lstm_3(action_frames)
 
         concat_features = self.concat([lstm_features_1, lstm_features_2, duration_left])
+
+        actor = self.actor_hidden_1(concat_features)
+        actor = self.actor_output(actor)
+
+        critic = self.critic_hidden_1(concat_features)
+        critic = self.critic_output(critic)
+
+        return actor, critic
+    
+    def _call_ver_10(self, action_seq, action_frames, duration_left):
+        is_padding = (action_seq == 0)
+        is_padding_expanded = tf.expand_dims(is_padding, axis=-1)
+        one_hot_features = self.one_hot_layer_1(action_seq)
+        one_hot_features = tf.where(is_padding_expanded, -1.0, one_hot_features)
+    
+        one_hot_features = self.masking(one_hot_features)
+        action_frames = self.masking(tf.expand_dims(action_frames, axis=-1))
+
+        seq_features = self.concat([one_hot_features, action_frames])
+        lstm_features = self.lstm_2(seq_features)
+
+        concat_features = self.concat([lstm_features, duration_left])
 
         actor = self.actor_hidden_1(concat_features)
         actor = self.actor_output(actor)
