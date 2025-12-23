@@ -49,6 +49,7 @@ class Agent:
         dummy_input = {
             "action_seq": tf.zeros((1, self.seq_len)), 
             "action_frames": tf.zeros((1, self.seq_len)), 
+            "relatve_action_frames": tf.zeros((1, self.seq_len)), 
             "duration_left": tf.zeros((1, 1)),
         }
 
@@ -96,6 +97,10 @@ class Agent:
         action_frames = None
         if state.action_frames is not None:
             action_frames = tf.convert_to_tensor(state.action_frames, dtype=tf.float32)
+
+        relative_action_frames = None
+        if relative_action_frames is not None:
+            relative_action_frames = tf.convert_to_tensor(state.relative_action_frames, dtype=tf.float32)
         
         duration_left = None
         if state.duration_left is not None:
@@ -104,6 +109,7 @@ class Agent:
         unpacked_state = {
             "action_seq": action_seq,
             "action_frames": action_frames,
+            "relative_action_frames": relative_action_frames,
             "duration_left": duration_left,
         }
 
