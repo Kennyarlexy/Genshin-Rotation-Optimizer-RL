@@ -99,7 +99,7 @@ class Agent:
             action_frames = tf.convert_to_tensor(state.action_frames, dtype=tf.float32)
 
         relative_action_frames = None
-        if relative_action_frames is not None:
+        if state.relative_action_frames is not None:
             relative_action_frames = tf.convert_to_tensor(state.relative_action_frames, dtype=tf.float32)
         
         duration_left = None
