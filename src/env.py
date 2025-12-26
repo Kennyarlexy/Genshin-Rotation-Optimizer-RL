@@ -308,7 +308,8 @@ class GcsimV2(GcsimEnv):
         self.step_count = 0
         self.state.action_seq[1:] = self.SPECIAL_ACTIONS["<none>"]
         self.state.action_frames[1:] = -1
-        self.state.relative_action_frames[:] = -1
+        self.state.relative_action_frames[0] = 0
+        self.state.relative_action_frames[1:] = -1
         self.state.duration_left = 1 # normalized (full duration is 1)
         self.last_action_frame = None
 
