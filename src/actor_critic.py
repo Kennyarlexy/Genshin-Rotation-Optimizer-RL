@@ -42,8 +42,6 @@ class ActorCritic(keras.Model):
         self.critic_hidden_2 = layers.Dense(32, activation='relu')
         self.critic_output   = layers.Dense(1, activation='linear')
 
-        self.build(input_shape=(None, self.seq_len))
-
     def call(self, inputs):
         action_seq = inputs["action_seq"]
         action_frames = inputs["action_frames"]
