@@ -39,16 +39,22 @@ class SyncVectorGcsimEnv:
         if state_list[0].duration_left is not None:
             batch_duration_left = np.array([s.duration_left for s in state_list])
 
+        batch_remaining_skill_cds = None
+        if state_list[0].remaining_skill_cds is not None:
+            batch_remaining_skill_cds = np.stack([s.remaining_skill_cds for s in state_list])
+
         return GcsimState(
             action_seq=batch_action_seq, 
             action_frames=batch_action_frames, 
             relative_action_frames=batch_relative_action_frames,
-            duration_left=batch_duration_left
+            duration_left=batch_duration_left,
+            remaining_skill_cds=batch_remaining_skill_cds,
         )
     
 
 if __name__ == "__main__":
     action_list = ["alhaitham attack"]
-    env = SyncVectorGcsimEnv(lambda: GcsimV2(action_list))
+    env = SyncVectorGcsimEnv(lambda: GcsimV2(action_list), n_envs=4)
     state = env.reset()
     print(state)
+    env.close()

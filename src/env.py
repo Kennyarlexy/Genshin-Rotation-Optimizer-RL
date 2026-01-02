@@ -13,10 +13,14 @@ PROJECT_ROOT = SCRIPT_PATH.parent.parent
 
 @dataclass
 class GcsimState:
+    """
+    everything except action_seq are normalized to be real number between [0, 1]
+    """
     action_seq: np.ndarray
     action_frames: np.ndarray | None = None
-    relative_action_frames: np.ndarray | None = None    # difference between latest action and all pass actions
-    duration_left: np.ndarray | float | None = None     # in seconds, normalized
+    relative_action_frames: np.ndarray | None = None    # difference between the latest action and all pass actions
+    duration_left: np.ndarray | float | None = None
+    remaining_skill_cds: np.ndarray | None = None       # for every character in config header, even if no actions have been executed
 
 
 class GcsimEnv:
@@ -50,6 +54,8 @@ class GcsimEnv:
         "<none>": 0, 
         "<start>": 1,
     }
+
+    N_CHARACTERS = 4
     
     instance_cnt = 0
     
@@ -132,23 +138,37 @@ class GcsimEnv:
         
         return cd_duration, rps
     
-    def _analyze_gcsim_sample(self) -> tuple[list[int], list[float]]:
+    def _analyze_gcsim_sample(self) -> tuple[list[int], list[float], list[int]]:
+        """        
+        :return action_frames: frames during which an action happen
+        :return damages: accumulated damage in between each action
+        :return skill_ready_frames: frame at which character at index i (provided by the sim) cooldown refreshes after accounting for all cooldown reductions
+        :return skill_cd_durations: original cooldown of character at index i (provided by the sim) in frames before accounting for any cooldown reduction
+
+        """
         with open(self.gcsim_sample_file_path, "r") as gcsim_sample_file:
             data = json.load(gcsim_sample_file)
 
-        # when does the action happen, damage partitioned by each action
-        action_frames, damages = [], []
+        # frames during which an action happen
+        action_frames = []
+        # accumulated damage in between each action
+        damages = []
+        # frame at which character at index i (provided by the sim) cooldown refreshes after accounting for all cooldown reductions
+        skill_ready_frames = [0] * self.N_CHARACTERS
+        # original cooldown of character at index i (provided by the sim) in frames before accounting for any cooldown reduction
+        skill_cd_durations = [-1] * self.N_CHARACTERS 
+        
         for log in data["logs"]:
-            is_real_action_event = (log["event"] == "action") and ("action" in log["logs"]) and (log["logs"]["action"] in self.ACTION_TYPES)
-            is_damage_event      = (log["event"] == "damage") and ("self damage" not in log["logs"]["abil"])
-
-            if is_real_action_event:
+            if is_real_action_event := (log["event"] == "action") and ("action" in log["logs"]) and (log["logs"]["action"] in self.ACTION_TYPES):
                 action_frames.append(log["frame"])
                 damages.append(0)
-            elif is_damage_event:
+            elif is_damage_event := (log["event"] == "damage") and ("self damage" not in log["logs"]["abil"]):
                 damages[-1] += log["logs"]["damage"]
+            elif is_cooldown_event := (log["event"] == "cooldown") and (log["msg"] == "skill cooldown triggered"):
+                skill_ready_frames[log["char_index"]] = log["frame"] + log["logs"]["modified_cd_by_cdr"]
+                skill_cd_durations[log["char_index"]] = log["logs"]["original_cd"]
 
-        return action_frames, damages
+        return action_frames, damages, skill_ready_frames, skill_cd_durations
 
     def _run_gcsim(self) -> tuple[float, float, float]:        
         try:
@@ -292,7 +312,8 @@ class GcsimV2(GcsimEnv):
             action_seq=np.zeros((self.MAX_SEQ_LEN,), dtype=np.int32), 
             action_frames=np.zeros((self.MAX_SEQ_LEN,), dtype=np.float32), 
             relative_action_frames=np.zeros((self.MAX_SEQ_LEN,), dtype=np.float32), 
-            duration_left=1.0
+            duration_left=1.0,
+            remaining_skill_cds=np.zeros((self.N_CHARACTERS,), dtype=np.float32)
         )
         self.state.action_frames[1:] = -1
         self.state.relative_action_frames[1:] = -1
@@ -311,6 +332,7 @@ class GcsimV2(GcsimEnv):
         self.state.relative_action_frames[0] = 0
         self.state.relative_action_frames[1:] = -1
         self.state.duration_left = 1 # normalized (full duration is 1)
+        self.state.remaining_skill_cds[:] = 0
         self.last_action_frame = None
 
         return copy.deepcopy(self.state)
@@ -322,13 +344,14 @@ class GcsimV2(GcsimEnv):
         
         self._update_config_file(action)
         total_damage, _, _ = self._run_gcsim()
-        action_frames, damages = self._analyze_gcsim_sample()
+        action_frames, damages, skill_ready_frames, skill_cd_durations = self._analyze_gcsim_sample()
                 
         self.step_count += 1
         self.state.action_seq[self.step_count] = action + self.n_special_actions
         self.state.action_frames[self.step_count] = action_frames[-1] / (60*self.duration)
         self.state.relative_action_frames[:self.step_count + 1] = self.state.action_frames[self.step_count] - self.state.action_frames[:self.step_count + 1]
         self.state.duration_left = (self.duration - (action_frames[-1] / 60)) / self.duration
+        self.state.remaining_skill_cds = self._compute_remaining_skill_cds(action_frames, skill_ready_frames, skill_cd_durations)
 
         reward = 0.0 
         done = (action_frames[-1] == self.last_action_frame)
@@ -346,6 +369,15 @@ class GcsimV2(GcsimEnv):
         reward /= 1e6
         
         return copy.deepcopy(self.state), reward, done
+    
+    def _compute_remaining_skill_cds(self, action_frames: list, skill_ready_frames: list, skill_cd_durations: list):
+        skill_ready_frames = np.array(skill_ready_frames, dtype=np.float32)
+        skill_cd_durations = np.array(skill_cd_durations, dtype=np.float32)
+        remaining_skill_cds = skill_ready_frames - action_frames[-1]
+        remaining_skill_cds[(remaining_skill_cds < 0) | (skill_cd_durations == -1)] = 0
+        remaining_skill_cds /= skill_cd_durations
+        
+        return remaining_skill_cds
 
     @override
     def get_seq_len(self):
@@ -356,7 +388,7 @@ if __name__ == "__main__":
     action_list = ["alhaitham attack", "alhaitham skill", "furina skill", "kuki skill"]
     
     env = GcsimV1(action_list)
-    action_frames, damages = env._analyze_gcsim_sample()
+    action_frames, damages, _, _ = env._analyze_gcsim_sample()
     total_damage = sum(damages)
     print(total_damage)
     print(len(action_frames) == len(damages))
