@@ -51,11 +51,6 @@ class ActorCritic(keras.Model):
         relative_action_frames = inputs["relative_action_frames"]
         duration_left = inputs["duration_left"]
         
-        # return self._call_ver_1(action_seq)
-        # return self._call_ver_2(action_seq)
-        # return self._call_ver_3(action_seq)
-        # return self._call_ver_4(action_seq)
-        # return self._call_ver_5(action_seq)
         # return self._call_ver_6(action_seq, duration_left)
         # return self._call_ver_7(action_seq, action_frames, duration_left)
         # return self._call_ver_8(action_seq, action_frames, duration_left)
@@ -64,78 +59,6 @@ class ActorCritic(keras.Model):
         # return self._call_ver_11(action_seq, relative_action_frames, duration_left)
         return self._call_ver_12(action_seq, relative_action_frames, duration_left)
     
-    def _call_ver_1(self, inputs):
-        one_hot_features = self.one_hot_layer_1(inputs)
-        lstm_features    = self.lstm_2(one_hot_features)
-
-        actor = self.flatten_layer(one_hot_features)
-        actor = self.actor_hidden_1(actor)
-        actor = self.actor_output(actor)
-
-        critic = self.critic_hidden_1(lstm_features)
-        critic = self.critic_output(critic)
-
-        return actor, critic
-    
-    def _call_ver_2(self, inputs):
-        one_hot_features = self.one_hot_layer_1(inputs)
-        one_hot_features = one_hot_features[:, :, 1:]
-
-        lstm_inputs = self.one_hot_layer_2(inputs)
-        lstm_features = self.lstm_2(lstm_inputs)
-
-        actor = self.flatten_layer(one_hot_features)
-        actor = self.actor_hidden_1(actor)
-        actor = self.actor_output(actor)
-
-        critic = self.critic_hidden_1(lstm_features)
-        critic = self.critic_output(critic)
-
-        return actor, critic
-    
-    def _call_ver_3(self, inputs):
-        inputs = self.one_hot_layer_2(inputs)
-        features = self.lstm_2(inputs)
-
-        actor = self.actor_hidden_1(tf.stop_gradient(features))
-        actor = self.actor_hidden_2(actor)
-        actor = self.actor_output(actor)
-
-        critic = self.critic_hidden_1(features)
-        critic = self.critic_output(critic)
-
-        return actor, critic
-    
-    def _call_ver_4(self, inputs):
-        one_hot_features = self.one_hot_layer_2(inputs)
-
-        zeros_cnt = tf.reduce_sum(tf.cast(inputs == 0, tf.int32))
-        is_start_neuron = tf.constant([[int(zeros_cnt == self.seq_len - 1)]], dtype=tf.float32)
-
-        actor_input = one_hot_features[:, 1:, :-1]
-        actor = self.flatten_layer(actor_input)
-        actor = self.actor_hidden_1(tf.concat([is_start_neuron, actor], axis=-1))
-        actor = self.actor_hidden_2(actor)
-        actor = self.actor_output(actor)
-
-        critic = self.lstm_2(one_hot_features)
-        critic = self.critic_hidden_1(critic)
-        critic = self.critic_output(critic)
-
-        return actor, critic
-    
-    def _call_ver_5(self, inputs):
-        one_hot_features = self.one_hot_layer_2(inputs)
-        lstm_features    = self.lstm_2(one_hot_features)
-
-        actor = self.actor_hidden_1(lstm_features)
-        actor = self.actor_output(actor)
-
-        critic = self.critic_hidden_1(lstm_features)
-        critic = self.critic_output(critic)
-
-        return actor, critic
-
     def _call_ver_6(self, action_seq, duration_left):
         one_hot_features = self.one_hot_layer_2(action_seq)
         lstm_features    = self.lstm_2(one_hot_features)
