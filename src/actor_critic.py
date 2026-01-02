@@ -44,7 +44,6 @@ class ActorCritic(keras.Model):
 
         self.build(input_shape=(None, self.seq_len))
 
-    @tf.function
     def call(self, inputs):
         action_seq = inputs["action_seq"]
         action_frames = inputs["action_frames"]
@@ -171,7 +170,7 @@ class ActorCritic(keras.Model):
         return actor, critic
     
     def _call_ver_12(self, action_seq, relative_action_frames, duration_left):
-        batch_size, _ = action_seq.shape
+        batch_size = tf.shape(action_seq)[0]
         
         is_padding = tf.expand_dims((action_seq == 0), axis=-1)
 

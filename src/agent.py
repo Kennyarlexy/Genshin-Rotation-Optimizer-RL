@@ -81,6 +81,7 @@ class Agent:
         
         return action_prob_dist.sample()
 
+    @tf.function
     def _forward(self, inputs: dict) -> tuple[Any, tf.Tensor]:
         action_prob_dist, state_value = self.actor_critic(inputs)
         action_prob_dist = tfp.distributions.Categorical(probs=action_prob_dist)
