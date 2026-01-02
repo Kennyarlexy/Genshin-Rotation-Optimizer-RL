@@ -170,7 +170,7 @@ class Agent:
             critic_loss = tf.reduce_sum(tf.square(G_t - state_value))
             total_loss  = (actor_loss + self.critic_loss_coeff * critic_loss - self.entropy_coeff * entropy) / self.train_env.n_envs
 
-            tf.print("loss", total_loss)
+            tf.print("loss", total_loss, " |  probs[0]", action_prob_dist.probs[0], " |  values[0]", state_value[0])
         grads = tape.gradient(total_loss, self.actor_critic.trainable_variables)
         self.optimizer.apply_gradients(zip(grads, self.actor_critic.trainable_variables))
 
