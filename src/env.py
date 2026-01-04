@@ -183,32 +183,27 @@ class GcsimEnv:
         )
 
     def _run_gcsim(self) -> tuple[float, float, float]:        
-        try:
-            result = subprocess.run(
-                [self.GCSIM_EXE_PATH, '-c', self.config_file_path, '-out', self.gcsim_out_file_path, '-sample', self.gcsim_sample_file_path, '-seed', str(self.seed)], 
-                check=True, 
-                capture_output=True, 
-                text=True
-            )
-            output = result.stdout
+        result = subprocess.run(
+            [self.GCSIM_EXE_PATH, '-c', self.config_file_path, '-out', self.gcsim_out_file_path, '-sample', self.gcsim_sample_file_path, '-seed', str(self.seed)], 
+            check=True, 
+            capture_output=True, 
+            text=True
+        )
+        output = result.stdout
 
-            match_dmg = re.search(r"Average (\d+\.\d+) damage", output)
-            dmg = float(match_dmg.group(1))
+        match_dmg = re.search(r"Average (\d+\.\d+) damage", output)
+        dmg = float(match_dmg.group(1))
 
-            match_duration = re.search(r"over (\d+\.\d+) seconds", output)
-            duration = float(match_duration.group(1))
+        match_duration = re.search(r"over (\d+\.\d+) seconds", output)
+        duration = float(match_duration.group(1))
 
-            match_dps = re.search(r"in (\d+) dps", output)
-            dps = float(match_dps.group(1))
+        match_dps = re.search(r"in (\d+) dps", output)
+        dps = float(match_dps.group(1))
 
-            if self.debug is True and self.episode_count % self.debug_period == 0:
-                print(output)
-            
-            return dmg, duration, dps
-
-        except subprocess.CalledProcessError as e:
-            print(f"Error: {e.stderr}")
-            print(f"An unexpected error occurred: {e}")
+        if self.debug is True and self.episode_count % self.debug_period == 0:
+            print(output)
+        
+        return dmg, duration, dps
 
     def _update_config_file(self, action: int) -> None:
         self.config_file.seek(0, 2)
