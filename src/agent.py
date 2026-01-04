@@ -47,10 +47,11 @@ class Agent:
 
     def _load_weights(self, weights_h5_path):
         dummy_input = {
-            "action_seq": tf.zeros((1, self.seq_len)), 
+            "action_seq": tf.zeros((1, self.seq_len), dtype=tf.int32), 
             "action_frames": tf.zeros((1, self.seq_len)), 
             "relative_action_frames": tf.zeros((1, self.seq_len)), 
             "duration_left": tf.zeros((1, 1)),
+            "remaining_skill_cds": tf.zeros((1, 4)),
         }
 
         self.actor_critic(dummy_input)
@@ -107,11 +108,16 @@ class Agent:
         if state.duration_left is not None:
             duration_left = tf.expand_dims(tf.convert_to_tensor(state.duration_left, dtype=tf.float32), axis=-1)
 
+        remaining_skill_cds = None
+        if state.remaining_skill_cds is not None:
+            remaining_skill_cds = tf.convert_to_tensor(state.remaining_skill_cds, dtype=tf.float32)
+
         unpacked_state = {
             "action_seq": action_seq,
             "action_frames": action_frames,
             "relative_action_frames": relative_action_frames,
             "duration_left": duration_left,
+            "remaining_skill_cds": remaining_skill_cds,
         }
 
         return unpacked_state

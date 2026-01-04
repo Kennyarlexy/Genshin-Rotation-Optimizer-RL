@@ -47,6 +47,7 @@ class ActorCritic(keras.Model):
         action_frames = inputs["action_frames"]
         relative_action_frames = inputs["relative_action_frames"]
         duration_left = inputs["duration_left"]
+        remaining_skill_cds = inputs["remaining_skill_cds"]
         
         # return self._call_ver_6(action_seq, duration_left)
         # return self._call_ver_7(action_seq, action_frames, duration_left)
