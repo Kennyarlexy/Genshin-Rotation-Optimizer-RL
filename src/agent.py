@@ -32,7 +32,7 @@ class Agent:
 
         n_special_actions = self.train_env.envs[0].get_n_special_actions()
         self.actor_critic = ActorCritic(self.seq_len, self.n_actions, n_special_actions)
-        self.optimizer = keras.optimizers.Adam(learning_rate=alpha)
+        self.optimizer = keras.optimizers.AdamW(learning_rate=alpha)
 
         self.cumulative_reward_history = []
         self.n_loaded_episodes = 0
