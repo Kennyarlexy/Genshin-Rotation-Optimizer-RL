@@ -30,11 +30,13 @@ class GcsimSampleInfo:
     :var damages: accumulated damage in between each action
     :var skill_ready_frames: frame at which character at index i (provided by the sim) cooldown refreshes after accounting for all cooldown reductions
     :var skill_cd_durations: original cooldown of character at index i (provided by the sim) in frames before accounting for any cooldown reduction
+    :var wasted_frames: number of frames the sim waited for each action to be available (due to cooldown etc)
     """
     action_frames: list[int]
     damages: list[float]
     skill_ready_frames: list[int]
     skill_cd_durations: list[int]
+    wasted_frames: list[int]
 
 
 class GcsimEnv:
@@ -156,30 +158,34 @@ class GcsimEnv:
         with open(self.gcsim_sample_file_path, "r") as gcsim_sample_file:
             data = json.load(gcsim_sample_file)
 
-        # frames during which an action happen
         action_frames = []
-        # accumulated damage in between each action
         damages = []
-        # frame at which character at index i (provided by the sim) cooldown refreshes after accounting for all cooldown reductions
         skill_ready_frames = [0] * self.N_CHARACTERS
-        # original cooldown of character at index i (provided by the sim) in frames before accounting for any cooldown reduction
-        skill_cd_durations = [-1] * self.N_CHARACTERS 
+        skill_cd_durations = [-1] * self.N_CHARACTERS
+        wasted_frames = [0]
         
         for log in data["logs"]:
             if is_real_action_event := (log["event"] == "action") and ("action" in log["logs"]) and (log["logs"]["action"] in self.ACTION_TYPES):
                 action_frames.append(log["frame"])
                 damages.append(0)
+                wasted_frames.append(0)
             elif is_damage_event := (log["event"] == "damage") and ("self damage" not in log["logs"]["abil"]):
                 damages[-1] += log["logs"]["damage"]
             elif is_cooldown_event := (log["event"] == "cooldown") and (log["msg"] == "skill cooldown triggered"):
                 skill_ready_frames[log["char_index"]] = log["frame"] + log["logs"]["modified_cd_by_cdr"]
                 skill_cd_durations[log["char_index"]] = log["logs"]["original_cd"]
+            elif is_wasted_frame_event := (log["event"] == "sim") and log["msg"].endswith("action not ready"):
+                wasted_frames[-1] += 1
+
+        # wasted_frames[-1] is just there because it works by "looking forward" for a new action
+        wasted_frames.pop()
 
         return GcsimSampleInfo(
             action_frames=action_frames,
             damages=damages,
             skill_ready_frames=skill_ready_frames,
             skill_cd_durations=skill_cd_durations,
+            wasted_frames=wasted_frames,
         )
 
     def _run_gcsim(self) -> tuple[float, float, float]:        
@@ -373,7 +379,12 @@ class GcsimV2(GcsimEnv):
         elif self.step_count > 1:
             reward = sample_info.damages[-2]
         
+        # get 1 reward for every 1M damage dealt between the last action and prev action
         reward /= 1e6
+        # get 1 penalty for every 600 wasted frames caused by the last action
+        penalty = sample_info.wasted_frames[-1] / 600
+
+        reward -= penalty
         
         return copy.deepcopy(self.state), reward, done
     
