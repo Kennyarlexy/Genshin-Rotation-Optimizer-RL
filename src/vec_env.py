@@ -1,4 +1,4 @@
-from env import GcsimState, GcsimEnv, GcsimV1, GcsimV2
+from env import GcsimState, GcsimEnv, GcsimV1, GcsimV2, GcsimRunInfo
 from collections.abc import Iterable
 import numpy as np
 
@@ -14,11 +14,11 @@ class SyncVectorGcsimEnv:
         states = [env.reset() for env in self.envs]
         return self._stack_states(states)
 
-    def step(self, actions: Iterable[int]) -> tuple[GcsimState, np.ndarray, np.ndarray]:
+    def step(self, actions: Iterable[int]) -> tuple[GcsimState, np.ndarray, np.ndarray, tuple[GcsimRunInfo]]:
         results = zip(*[env.step(action) for env, action in zip(self.envs, actions)])
-        states, rewards, dones = results
+        states, rewards, dones, run_infos = results
         
-        return self._stack_states(states), np.array(rewards), np.array(dones)
+        return self._stack_states(states), np.array(rewards), np.array(dones), run_infos
     
     def close(self) -> None:
         for env in self.envs:

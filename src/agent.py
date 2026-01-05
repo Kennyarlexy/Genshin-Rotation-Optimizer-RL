@@ -211,8 +211,8 @@ if __name__ == "__main__":
 
     action_list = ["alhaitham skill", "alhaitham attack", "furina skill", "kuki skill"]
     
-    train_env = SyncVectorGcsimEnv(lambda: GcsimV2(action_list, debug=False, auto_reset=True), n_envs=6)
-    eval_env  = SyncVectorGcsimEnv(lambda: GcsimV2(action_list, debug=False, auto_reset=False), n_envs=1)
+    train_env = SyncVectorGcsimEnv(lambda: GcsimV2(action_list, auto_reset=True), n_envs=6)
+    eval_env  = SyncVectorGcsimEnv(lambda: GcsimV2(action_list, auto_reset=False), n_envs=1)
     
     try:
         agent = Agent(
