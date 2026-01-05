@@ -75,9 +75,7 @@ class GcsimEnv:
     
     instance_cnt = 0
     
-    def __init__(self, action_list: list[str], debug: bool=False, debug_period: int=10, options: dict | None=None, target: dict | None=None, auto_reset: bool=False) -> None:
-        self.debug = debug
-        self.debug_period = debug_period
+    def __init__(self, action_list: list[str], options: dict | None=None, target: dict | None=None, auto_reset: bool=False) -> None:
         self.done = False
         self.auto_reset = auto_reset
 
@@ -130,6 +128,8 @@ class GcsimEnv:
         """
         if self.config_file:
             self.config_file.close()
+
+        print("env closed...")
 
     def get_n_actions(self) -> int:
         return len(self.action_list)
@@ -205,9 +205,6 @@ class GcsimEnv:
 
         match_dps = re.search(r"in (\d+) dps", output)
         dps = float(match_dps.group(1))
-
-        if self.debug is True and self.episode_count % self.debug_period == 0:
-            print(output)
         
         return dmg, duration, dps
 
@@ -239,8 +236,8 @@ class GcsimV1(GcsimEnv):
     GcsimEnv with fixed number of steps per episode
     """
 
-    def __init__(self, action_list: list[str], steps_per_episode=30, debug: bool=False, debug_period: int=10, options: dict | None=None, target: dict | None=None, auto_reset: bool=False):
-        super().__init__(action_list, debug, debug_period, options, target, auto_reset)
+    def __init__(self, action_list: list[str], steps_per_episode=30, options: dict | None=None, target: dict | None=None, auto_reset: bool=False):
+        super().__init__(action_list, options, target, auto_reset)
 
         self.steps_per_episode = steps_per_episode
         self.state = GcsimState(np.zeros((self.steps_per_episode + 1,), dtype=np.int32))
@@ -313,12 +310,12 @@ class GcsimV2(GcsimEnv):
 
     MAX_SEQ_LEN = 150 # this shouldn't be exceeded in any case
     
-    def __init__(self, action_list: list[str], duration: float=60.0, debug: bool=False, debug_period: int=10, options: dict | None=None, target: dict | None=None, auto_reset: bool=False):
+    def __init__(self, action_list: list[str], duration: float=60.0, options: dict | None=None, target: dict | None=None, auto_reset: bool=False):
         options = options or self.DEFAULT_OPTIONS
         target = target or self.DEFAULT_TARGET
         options["duration"] = duration
 
-        super().__init__(action_list, debug, debug_period, options or self.DEFAULT_OPTIONS, target or self.DEFAULT_TARGET, auto_reset)
+        super().__init__(action_list, options or self.DEFAULT_OPTIONS, target or self.DEFAULT_TARGET, auto_reset)
         
         self.duration = duration
         self.state = GcsimState(
@@ -403,4 +400,12 @@ class GcsimV2(GcsimEnv):
 
 
 if __name__ == "__main__":
-    pass
+    env_1 = GcsimV1(["alhaitham attack"])
+    env_1.reset()
+    env_1.step(0)
+    env_1.close()
+
+    env_2 = GcsimV2(["alhaitham attack"])
+    env_2.reset()
+    env_2.step(0)
+    env_2.close()
