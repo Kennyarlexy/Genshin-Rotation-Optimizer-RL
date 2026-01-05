@@ -24,6 +24,14 @@ class GcsimState:
 
 
 @dataclass
+class GcsimRunInfo:
+    total_dmg: float
+    duration: float
+    dps: float
+    output: str
+
+
+@dataclass
 class GcsimSampleInfo:
     """
     :var action_frames: frames during which an action happen
@@ -188,7 +196,7 @@ class GcsimEnv:
             wasted_frames=wasted_frames,
         )
 
-    def _run_gcsim(self) -> tuple[float, float, float]:        
+    def _run_gcsim(self) -> GcsimRunInfo:        
         result = subprocess.run(
             [self.GCSIM_EXE_PATH, '-c', self.config_file_path, '-out', self.gcsim_out_file_path, '-sample', self.gcsim_sample_file_path, '-seed', str(self.seed)], 
             check=True, 
@@ -206,7 +214,12 @@ class GcsimEnv:
         match_dps = re.search(r"in (\d+) dps", output)
         dps = float(match_dps.group(1))
         
-        return dmg, duration, dps
+        return GcsimRunInfo(
+            total_dmg=dmg,
+            duration=duration,
+            dps=dps,
+            output=output,
+        )
 
     def _update_config_file(self, action: int) -> None:
         self.config_file.seek(0, 2)
@@ -267,7 +280,7 @@ class GcsimV1(GcsimEnv):
         return self.steps_per_episode + 1
     
     @override
-    def step(self, action: int) -> tuple[GcsimState, float, bool]:
+    def step(self, action: int) -> tuple[GcsimState, float, bool, GcsimRunInfo | None]:
         if self.done and not self.auto_reset:
             return copy.deepcopy(self.state), 0.0, True
         
@@ -277,14 +290,15 @@ class GcsimV1(GcsimEnv):
 
         reward = 0.0
         self._update_config_file(action)
+        run_info = None
         if done:
-            _, _, dps = self._run_gcsim()
-            reward = self._compute_reward(dps)
+            run_info = self._run_gcsim()
+            reward = self._compute_reward(run_info.dps)
             self.done = True
             if self.auto_reset:
                 self.reset()
         
-        return copy.deepcopy(self.state), reward, done
+        return copy.deepcopy(self.state), reward, done, run_info
 
 
 class GcsimV2(GcsimEnv):
@@ -353,7 +367,7 @@ class GcsimV2(GcsimEnv):
             return copy.deepcopy(self.state), 0.0, True
         
         self._update_config_file(action)
-        total_damage, _, _ = self._run_gcsim()
+        run_info = self._run_gcsim()
         sample_info = self._analyze_gcsim_sample()
         
         self.step_count += 1
@@ -367,7 +381,7 @@ class GcsimV2(GcsimEnv):
         done = (sample_info.action_frames[-1] == self.last_action_frame)
         self.last_action_frame = sample_info.action_frames[-1]
 
-        assert abs(sum(sample_info.damages) - total_damage) < 1.0, "damage from running the sim vs obtained from sample is different"
+        assert abs(sum(sample_info.damages) - run_info.total_dmg) < 1.0, "damage from running the sim vs obtained from sample is different"
         if done:
             reward = sample_info.damages[-1]
             self.done = True
@@ -383,7 +397,7 @@ class GcsimV2(GcsimEnv):
 
         reward -= penalty
         
-        return copy.deepcopy(self.state), reward, done
+        return copy.deepcopy(self.state), reward, done, run_info
     
     def _compute_remaining_skill_cds(self, sample_info: GcsimSampleInfo) -> np.ndarray:
         skill_ready_frames = np.array(sample_info.skill_ready_frames, dtype=np.float32)

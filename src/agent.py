@@ -137,7 +137,7 @@ class Agent:
             action_prob_dist, _ = self._forward(self._unpack_state(states[-1]))
 
             action = action_prob_dist.sample()
-            state_, reward, done = self.train_env.step(action)
+            state_, reward, done, _ = self.train_env.step(action)
             states.push_back(state_)
             actions.push_back(action)
             rewards.push_back(reward)
@@ -188,19 +188,23 @@ class Agent:
         if self.eval_env.n_envs > 1:
             raise Exception("Can only evaluate on single instance of environment when parallelized.")
         
-        total_reward = 0
+        total_reward, total_dmg = 0, 0
         for _ in range(self.n_eval_episodes):
             state = self.eval_env.reset()
             done = False
             while not done:
                 action = self.select_action(state, greedy=greedy)
-                state, _reward, _done = self.eval_env.step(action)
+                state, _reward, _done, info = self.eval_env.step(action)
                 total_reward += np.squeeze(_reward)
                 done = np.squeeze(_done)
+            
+            total_dmg += info[0].total_dmg
 
         avg_reward = total_reward / self.n_eval_episodes
+        avg_dmg = total_dmg / self.n_eval_episodes
 
         print(f"average reward for {self.n_eval_episodes} episodes run{' (greedy)' if greedy else ''}: {avg_reward}")
+        print(f"average damage: {avg_dmg}")
         
         return avg_reward
 
