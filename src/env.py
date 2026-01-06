@@ -52,13 +52,17 @@ class GcsimEnv:
     A custom environment following the Gymnasium interface.
     """
     GCSIM_EXE_PATH = PROJECT_ROOT / "bin" / "gcsim.exe"
-    GCSIM_OUT_FOLDER_PATH = PROJECT_ROOT / "gcsim_output"
-    GCSIM_OUT_FILE_BASENAME = "gcsim_out.json"
-    GCSIM_SAMPLE_FILE_BASENAME = "gcsim_sample.json"
 
-    CONFIG_FOLDER_PATH = PROJECT_ROOT / "gcsim_config"
-    CONFIG_HEADER_FILE_PATH = CONFIG_FOLDER_PATH / "config_header.txt"
+    # directory to store text files related to gcsim
+    GCSIM_DIR_PATH = PROJECT_ROOT / "gcsim"
+
+    RUN_DIR_PATH = GCSIM_DIR_PATH / "runs"
+    
     CONFIG_FILE_BASENAME = "config.txt"
+    OUT_FILE_BASENAME = "gcsim_out.json"
+    SAMPLE_FILE_BASENAME = "gcsim_sample.json"
+
+    CONFIG_HEADER_FILE_PATH = GCSIM_DIR_PATH / "config_header.txt"
     
     DEFAULT_OPTIONS = {
         "iteration": 10,
@@ -99,9 +103,9 @@ class GcsimEnv:
 
         self.id = GcsimEnv.instance_cnt
         GcsimEnv.instance_cnt += 1
-        self.config_file_path = self.CONFIG_FOLDER_PATH / str(self.id) / self.CONFIG_FILE_BASENAME
-        self.gcsim_out_file_path = self.GCSIM_OUT_FOLDER_PATH / str(self.id) / self.GCSIM_OUT_FILE_BASENAME
-        self.gcsim_sample_file_path = self.GCSIM_OUT_FOLDER_PATH / str(self.id) / self.GCSIM_SAMPLE_FILE_BASENAME
+        self.config_file_path = self.RUN_DIR_PATH / str(self.id) / self.CONFIG_FILE_BASENAME
+        self.gcsim_out_file_path = self.RUN_DIR_PATH  / str(self.id) /  self.OUT_FILE_BASENAME
+        self.gcsim_sample_file_path = self.RUN_DIR_PATH  / str(self.id) /  self.SAMPLE_FILE_BASENAME
         
         self.config_file_path.parent.mkdir(parents=True, exist_ok=True)
         self.gcsim_out_file_path.parent.mkdir(parents=True, exist_ok=True)

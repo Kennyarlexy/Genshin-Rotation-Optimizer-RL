@@ -2,5 +2,5 @@
 /__pycache__
 /models
 /src/__pycache__
-/gcsim_output
+/gcsim/runs
 /var
