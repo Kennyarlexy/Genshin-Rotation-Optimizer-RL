@@ -390,10 +390,10 @@ class GcsimV2(GcsimEnv):
         elif self.step_count > 1:
             reward = sample_info.damages[-2]
         
-        # get 1 reward for every 1M damage dealt between the last action and prev action
-        reward /= 1e6
-        # get 1 penalty for every 600 wasted frames caused by the last action
-        penalty = sample_info.wasted_frames[-1] / 600
+        # get 1 reward for every 500K damage dealt between the last action and prev action
+        reward /= 5e5
+        # get 1 penalty for every 1200 wasted frames caused by the last action
+        penalty = sample_info.wasted_frames[-1] / 1200
 
         reward -= penalty
         
