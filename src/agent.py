@@ -213,7 +213,7 @@ if __name__ == "__main__":
     WEIGHTS_H5_PATH = PROJECT_ROOT / 'models' / 'actor_critic.weights.h5'
     FINAL_RETURN_HISTORY_PATH = PROJECT_ROOT / 'var' / 'final_return_history.txt'
 
-    action_list = ["alhaitham skill", "alhaitham attack", "furina skill", "kuki skill"]
+    action_list = ["alhaitham skill", "alhaitham attack:2", "furina skill", "kuki skill"]
     
     train_env = SyncVectorGcsimEnv(lambda: GcsimV2(action_list, auto_reset=True), n_envs=6)
     eval_env  = SyncVectorGcsimEnv(lambda: GcsimV2(action_list, auto_reset=False), n_envs=1)
@@ -221,14 +221,15 @@ if __name__ == "__main__":
     try:
         agent = Agent(
             train_env, eval_env, 
-            gamma=1.0, 
-            entropy_coeff=0.1, 
+            gamma=0.98, 
+            entropy_coeff=0.030,
             critic_loss_coeff=0.5, 
-            alpha=1e-4, 
-            n_step=7
+            alpha=8e-5, 
+            n_step=5,
+            eval_freq=250,
         )
         agent.load(WEIGHTS_H5_PATH, FINAL_RETURN_HISTORY_PATH)
-        agent.learn(100, evaluate=True)
+        agent.learn(2000, evaluate=True)
         agent.save(WEIGHTS_H5_PATH, FINAL_RETURN_HISTORY_PATH)
     except:
         traceback.print_exc() 

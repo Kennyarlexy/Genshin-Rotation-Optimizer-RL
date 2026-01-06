@@ -24,7 +24,7 @@ class ActorCritic(keras.Model):
         self.flatten_layer = layers.Flatten()
         self.embedding     = layers.Embedding(input_dim=n_actions+n_special_actions, output_dim=3, name='action_embedding', mask_zero=True)
         self.lstm_1        = layers.LSTM(16, return_sequences=True)
-        self.lstm_2        = layers.LSTM(64)
+        self.lstm_2        = layers.LSTM(16)
         self.lstm_3        = layers.LSTM(16)
         self.lstm_4        = layers.Bidirectional(self.lstm_1)
         self.lstm_5        = layers.Bidirectional(self.lstm_2)
