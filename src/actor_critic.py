@@ -55,7 +55,8 @@ class ActorCritic(keras.Model):
         # return self._call_ver_9(action_seq, action_frames, duration_left)
         # return self._call_ver_10(action_seq, action_frames, duration_left)
         # return self._call_ver_11(action_seq, relative_action_frames, duration_left)
-        return self._call_ver_12(action_seq, relative_action_frames, duration_left)
+        # return self._call_ver_12(action_seq, relative_action_frames, duration_left)
+        return self._call_ver_13(action_seq, relative_action_frames, duration_left, remaining_skill_cds)
     
     def _call_ver_6(self, action_seq, duration_left):
         one_hot_features = self.one_hot_layer_2(action_seq)
@@ -198,6 +199,47 @@ class ActorCritic(keras.Model):
         lstm_features = self.lstm_5(lstm_features)
 
         concat_features = self.concat([lstm_features, duration_left])
+
+        actor = self.actor_hidden_1(concat_features)
+        actor = self.actor_hidden_2(actor)
+        actor = self.actor_output(actor)
+
+        critic = self.critic_hidden_1(concat_features)
+        critic = self.critic_hidden_2(critic)
+        critic = self.critic_output(critic)
+
+        return actor, critic
+    
+    def _call_ver_13(self, action_seq, relative_action_frames, duration_left, remaining_skill_cds):
+        batch_size = tf.shape(action_seq)[0]
+        
+        is_padding = tf.expand_dims((action_seq == 0), axis=-1)
+
+        action_embedding = self.one_hot_layer_1(action_seq)
+        action_embedding = tf.where(is_padding, -1.0, action_embedding)
+        action_embedding = self.masking(action_embedding)
+
+        # Shape: (B, seq) --> [[0, 0, 0, ...], [1, 1, 1, ...], ...]
+        batch_idx = tf.broadcast_to(tf.expand_dims(tf.range(batch_size), axis=1), (batch_size, self.seq_len))
+
+        # Shape: (B, seq) --> [[0, 1, 2, ...], [0, 1, 2, ...], ...]
+        seq_idx = tf.broadcast_to(tf.expand_dims(tf.range(self.seq_len), axis=0), (batch_size, self.seq_len))
+        
+        # Shape: (B, seq); the <None> action will be masked later
+        action_idx = tf.where((action_seq != 0), action_seq - 1, 0)
+        
+        # Coordinate tensor with shape: (B, seq, 3)
+        full_indices = tf.stack([batch_idx, seq_idx, action_idx], axis=-1)
+        
+        frame_embedding = tf.scatter_nd(full_indices, relative_action_frames, (batch_size, self.seq_len, self.action_size + 1))
+        frame_embedding = tf.where(is_padding, -1.0, frame_embedding)
+        frame_embedding = self.masking(frame_embedding)
+
+        seq_embedding = self.concat([action_embedding, frame_embedding])
+        lstm_features = self.lstm_4(seq_embedding)
+        lstm_features = self.lstm_5(lstm_features)
+
+        concat_features = self.concat([lstm_features, duration_left, remaining_skill_cds])
 
         actor = self.actor_hidden_1(concat_features)
         actor = self.actor_hidden_2(actor)
