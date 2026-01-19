@@ -16,12 +16,12 @@ SCRIPT_PATH = Path(__file__)
 PROJECT_ROOT = SCRIPT_PATH.parent.parent
 
 class Agent:
-    def __init__(self, train_env: SyncVectorGcsimEnv | None=None, eval_env: SyncVectorGcsimEnv | None=None, gamma=1.0, alpha=6e-3, n_step = 1, entropy_coeff=0.01, critic_loss_coeff=0.5, eval_freq: int=100, n_eval_episodes: int=10):
+    def __init__(self, train_env: SyncVectorGcsimEnv | None=None, eval_env: SyncVectorGcsimEnv | None=None, gamma=1.0, alpha=6e-3, t_max = 1, entropy_coeff=0.01, critic_loss_coeff=0.5, eval_freq: int=100, n_eval_episodes: int=10):
         self.train_env = train_env
         self.eval_env = eval_env
         self.gamma = tf.constant(gamma, dtype=tf.float32)
         self.alpha = tf.constant(alpha, dtype=tf.float32)
-        self.n_step = n_step
+        self.t_max = t_max
         self.entropy_coeff = tf.constant(entropy_coeff, dtype=tf.float32)
         self.critic_loss_coeff = tf.constant(critic_loss_coeff, dtype=tf.float32)
         self.eval_freq = eval_freq
@@ -127,14 +127,13 @@ class Agent:
         if self.train_env is None:
             raise Exception("No environment to learn from, pass in train_env when constructing agent to learn.")
         
-        states = FastDeque(self.n_step + 1)
-        actions = FastDeque(self.n_step)
-        rewards = FastDeque(self.n_step)
-        dones = FastDeque(self.n_step)
+        states = FastDeque(self.t_max + 1)
+        actions = FastDeque(self.t_max)
+        rewards = FastDeque(self.t_max)
+        dones = FastDeque(self.t_max)
 
         states.push_back(self.train_env.reset())
-        # to learn for "steps" number of times, we need steps + self.n_step - 1 interactions
-        for step in range(1, steps + self.n_step):
+        for step in range(1, steps + 1):
             action_prob_dist, _ = self._forward(self._unpack_state(states[-1]))
 
             action = action_prob_dist.sample()
@@ -144,28 +143,36 @@ class Agent:
             rewards.push_back(reward)
             dones.push_back(done)
             
-            if step >= self.n_step:
-                state: GcsimState = states.pop_front()
-                action: tf.Tensor = actions.pop_front()
-                
+            if step % self.t_max == 0 or step == steps:
                 _, state_value_ = self._forward(self._unpack_state(states[-1]))
-                G_t = tf.stop_gradient(tf.squeeze(state_value_, axis=-1))
-                for t in reversed(range(self.n_step)):
-                    G_t = rewards[t] + self.gamma * G_t * (1 - dones[t])
 
-                rewards.pop_front()
-                dones.pop_front()
+                G = tf.stop_gradient(tf.squeeze(state_value_, axis=-1))
+                n_step_max = min(self.t_max, rewards.size)
+                Gs = [None] * n_step_max
+                for t in reversed(range(n_step_max)):
+                    reward: np.ndarray = rewards.pop_back()
+                    done: np.ndarray = dones.pop_back()
+                    G = reward + self.gamma * G * (1 - done)
+                    Gs[t] = G
+                
+                accum_grads = [tf.zeros_like(var) for var in self.actor_critic.trainable_variables]
+                for t in range(n_step_max):
+                    state: GcsimState = states.pop_front()
+                    action: tf.Tensor = actions.pop_front()
+                
+                    print(f"step {step - self.t_max + 1 + t}  |  ", end="")
+                    grads = self._compute_grads(self._unpack_state(state), action, Gs[t])
+                    accum_grads = self._add_grads(accum_grads, grads)
+                
+                self.optimizer.apply_gradients(zip(accum_grads, self.actor_critic.trainable_variables))
 
-                print(f"step {step - self.n_step + 1}  |  ", end="")
-                self._update_network(self._unpack_state(state), action, G_t)
-
-                if evaluate and (step - self.n_step + 1) % self.eval_freq == 0:
-                    print("Paused for evaluation...")
-                    self.evaluate()
-                    self.evaluate(greedy=True)
+            if evaluate and step % self.eval_freq == 0:
+                print("Paused for evaluation...")
+                self.evaluate()
+                self.evaluate(greedy=True)
 
     @tf.function
-    def _update_network(self, unpacked_state, action, G_t):
+    def _compute_grads(self, unpacked_state, action, G_t):
         with tf.GradientTape() as tape:
             action_prob_dist, state_value = self._forward(unpacked_state)
 
@@ -179,8 +186,15 @@ class Agent:
             total_loss  = (actor_loss + self.critic_loss_coeff * critic_loss - self.entropy_coeff * entropy) / self.train_env.n_envs
 
             tf.print("loss", total_loss, " |  probs[0]", action_prob_dist.probs[0], " |  values[0]", state_value[0])
+
         grads = tape.gradient(total_loss, self.actor_critic.trainable_variables)
-        self.optimizer.apply_gradients(zip(grads, self.actor_critic.trainable_variables))
+        return grads
+
+    def _add_grads(self, grads_1, grads_2) -> list[tf.Tensor]:
+        for i in range(len(grads_1)):
+            grads_1[i] = grads_1[i] + grads_2[i]
+
+        return grads_1
 
     def evaluate(self, greedy=False):
         if self.eval_env is None:
@@ -225,9 +239,9 @@ if __name__ == "__main__":
             gamma=0.98, 
             entropy_coeff=0.030,
             critic_loss_coeff=0.5, 
-            alpha=8e-5, 
-            n_step=5,
-            eval_freq=250,
+            alpha=1e-4, 
+            t_max=6,
+            eval_freq=750,
         )
         agent.load(WEIGHTS_H5_PATH, FINAL_RETURN_HISTORY_PATH)
         agent.learn(2000, evaluate=True)
