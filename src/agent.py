@@ -37,15 +37,17 @@ class Agent:
         self.cumulative_reward_history = []
         self.n_loaded_episodes = 0
 
+        self._build_network()
+
     def load(self, weights_h5_path, final_return_history_path):
-        self._load_weights(weights_h5_path)
+        self.actor_critic.load_weights(weights_h5_path)
         self._load_final_return_history(final_return_history_path)
 
     def save(self, weights_h5_path, final_return_history_path):
         self._save_weights(weights_h5_path)
         self._save_final_return_history(final_return_history_path)
 
-    def _load_weights(self, weights_h5_path):
+    def _build_network(self):
         dummy_input = {
             "action_seq": tf.zeros((1, self.seq_len), dtype=tf.int32), 
             "action_frames": tf.zeros((1, self.seq_len)), 
@@ -55,7 +57,6 @@ class Agent:
         }
 
         self.actor_critic(dummy_input)
-        self.actor_critic.load_weights(weights_h5_path)
         
     def _save_weights(self, weight_h5_path):
         self.actor_critic.save_weights(weight_h5_path)
