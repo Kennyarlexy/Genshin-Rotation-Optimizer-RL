@@ -128,7 +128,7 @@ class GcsimEnv(ABC):
         self._reset_config_file()
 
     @abstractmethod
-    def step(self, action) -> tuple[GcsimState, float, bool]:
+    def step(self, action: int) -> tuple[GcsimState, float, bool, GcsimRunInfo | None]:
         """
         Execute one time step within the environment.
         """
@@ -366,7 +366,7 @@ class GcsimV2(GcsimEnv):
         return copy.deepcopy(self.state)
         
     @override
-    def step(self, action: int) -> tuple[GcsimState, float, bool]:        
+    def step(self, action: int) -> tuple[GcsimState, float, bool, GcsimRunInfo]:        
         if self.done and not self.auto_reset:
             return copy.deepcopy(self.state), 0.0, True
         
