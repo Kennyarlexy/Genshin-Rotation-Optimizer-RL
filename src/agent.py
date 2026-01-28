@@ -10,10 +10,11 @@ from actor_critic import ActorCritic
 from env import GcsimEnv, GcsimV1, GcsimV2, GcsimState
 from vec_env import SyncVectorGcsimEnv
 from tqdm import tqdm
-from custom_plot import plot_time_series
+
 
 SCRIPT_PATH = Path(__file__)
 PROJECT_ROOT = SCRIPT_PATH.parent.parent
+
 
 class Agent:
     def __init__(self, train_env: SyncVectorGcsimEnv | None=None, eval_env: SyncVectorGcsimEnv | None=None, gamma=1.0, alpha=6e-3, t_max = 1, entropy_coeff=0.01, critic_loss_coeff=0.5, eval_freq: int=100, n_eval_episodes: int=10):
@@ -90,28 +91,28 @@ class Agent:
 
         return action_prob_dist, state_value
     
-    def _unpack_state(self, state: GcsimState) -> dict:
+    def _unpack_state(self, states: list[GcsimState]) -> dict:
         """
         Unpack into dictionary containing tensors with correct shapes for feed forward
         """
 
-        action_seq = tf.convert_to_tensor(state.action_seq, dtype=tf.int32)
+        action_seq = tf.convert_to_tensor([state.action_seq for state in states], dtype=tf.int32)
 
         action_frames = None
-        if state.action_frames is not None:
-            action_frames = tf.convert_to_tensor(state.action_frames, dtype=tf.float32)
+        if states[0].action_frames is not None:
+            action_frames = tf.convert_to_tensor([state.action_frames for state in states], dtype=tf.float32)
 
         relative_action_frames = None
-        if state.relative_action_frames is not None:
-            relative_action_frames = tf.convert_to_tensor(state.relative_action_frames, dtype=tf.float32)
+        if states[0].relative_action_frames is not None:
+            relative_action_frames = tf.convert_to_tensor([state.relative_action_frames for state in states], dtype=tf.float32)
         
         duration_left = None
-        if state.duration_left is not None:
-            duration_left = tf.expand_dims(tf.convert_to_tensor(state.duration_left, dtype=tf.float32), axis=-1)
+        if states[0].duration_left is not None:
+            duration_left = tf.expand_dims([state.duration_left for state in states], axis=-1)
 
         remaining_skill_cds = None
-        if state.remaining_skill_cds is not None:
-            remaining_skill_cds = tf.convert_to_tensor(state.remaining_skill_cds, dtype=tf.float32)
+        if states[0].remaining_skill_cds is not None:
+            remaining_skill_cds = tf.convert_to_tensor([state.remaining_skill_cds for state in states], dtype=tf.float32)
 
         unpacked_state = {
             "action_seq": action_seq,
@@ -127,41 +128,41 @@ class Agent:
         if self.train_env is None:
             raise Exception("No environment to learn from, pass in train_env when constructing agent to learn.")
         
-        states = FastDeque(self.t_max + 1)
-        actions = FastDeque(self.t_max)
-        rewards = FastDeque(self.t_max)
-        dones = FastDeque(self.t_max)
+        states_buff = FastDeque(self.t_max + 1)
+        actions_buff = FastDeque(self.t_max)
+        rewards_buff = FastDeque(self.t_max)
+        dones_buff = FastDeque(self.t_max)
 
-        states.push_back(self.train_env.reset())
+        states_buff.push_back(self.train_env.reset())
         for step in range(1, steps + 1):
-            action_prob_dist, _ = self._forward(self._unpack_state(states[-1]))
+            action_prob_dists, _ = self._forward(self._unpack_state(states_buff[-1]))
 
-            action = action_prob_dist.sample()
-            state_, reward, done, _ = self.train_env.step(action)
-            states.push_back(state_)
-            actions.push_back(action)
-            rewards.push_back(reward)
-            dones.push_back(done)
+            actions = action_prob_dists.sample()
+            states_, rewards, dones, _ = self.train_env.step(actions)
+            states_buff.push_back(states_)
+            actions_buff.push_back(actions)
+            rewards_buff.push_back(rewards)
+            dones_buff.push_back(dones)
             
             if step % self.t_max == 0 or step == steps:
-                _, state_value_ = self._forward(self._unpack_state(states[-1]))
+                _, state_values_ = self._forward(self._unpack_state(states_buff[-1]))
 
-                G = tf.stop_gradient(tf.squeeze(state_value_, axis=-1))
-                n_step_max = min(self.t_max, rewards.size)
+                G = tf.stop_gradient(tf.squeeze(state_values_, axis=-1))
+                n_step_max = min(self.t_max, rewards_buff.size)
                 Gs = [None] * n_step_max
                 for t in reversed(range(n_step_max)):
-                    reward: np.ndarray = rewards.pop_back()
-                    done: np.ndarray = dones.pop_back()
-                    G = reward + self.gamma * G * (1 - done)
+                    rewards: np.ndarray = rewards_buff.pop_back()
+                    dones: np.ndarray = dones_buff.pop_back()
+                    G = rewards + self.gamma * G * (1 - dones)
                     Gs[t] = G
                 
                 accum_grads = [tf.zeros_like(var) for var in self.actor_critic.trainable_variables]
                 for t in range(n_step_max):
-                    state: GcsimState = states.pop_front()
-                    action: tf.Tensor = actions.pop_front()
+                    states: GcsimState = states_buff.pop_front()
+                    actions: tf.Tensor = actions_buff.pop_front()
                 
-                    print(f"step {step - self.t_max + 1 + t}  |  ", end="")
-                    grads = self._compute_grads(self._unpack_state(state), action, Gs[t])
+                    print(f"step {step - n_step_max + 1 + t}  |  ", end="")
+                    grads = self._compute_grads(self._unpack_state(states), actions, Gs[t])
                     accum_grads = self._add_grads(accum_grads, grads)
                 
                 self.optimizer.apply_gradients(zip(accum_grads, self.actor_critic.trainable_variables))
@@ -172,20 +173,20 @@ class Agent:
                 self.evaluate(greedy=True)
 
     @tf.function
-    def _compute_grads(self, unpacked_state, action, G_t):
+    def _compute_grads(self, unpacked_state, actions, Gs):
         with tf.GradientTape() as tape:
-            action_prob_dist, state_value = self._forward(unpacked_state)
+            action_prob_dists, state_values = self._forward(unpacked_state)
 
-            log_prob = action_prob_dist.log_prob(action)
+            log_probs = action_prob_dists.log_prob(actions)
 
-            state_value = tf.squeeze(state_value, axis=-1)
-            advantage   = tf.stop_gradient(G_t - state_value)
-            entropy     = tf.reduce_sum(action_prob_dist.entropy())
-            actor_loss  = -1 * tf.reduce_sum(advantage * log_prob)
-            critic_loss = tf.reduce_sum(tf.square(G_t - state_value))
-            total_loss  = (actor_loss + self.critic_loss_coeff * critic_loss - self.entropy_coeff * entropy) / self.train_env.n_envs
+            state_values = tf.squeeze(state_values, axis=-1)
+            advantages   = tf.stop_gradient(Gs - state_values)
+            entropy      = tf.reduce_sum(action_prob_dists.entropy())
+            actor_loss   = -1 * tf.reduce_sum(advantages * log_probs)
+            critic_loss  = tf.reduce_sum(tf.square(Gs - state_values))
+            total_loss   = (actor_loss + self.critic_loss_coeff * critic_loss - self.entropy_coeff * entropy) / self.train_env.n_envs
 
-            tf.print("loss", total_loss, " |  probs[0]", action_prob_dist.probs[0], " |  values[0]", state_value[0])
+            tf.print("loss", total_loss, " |  probs[0]", action_prob_dists.probs[0], " |  values[0]", state_values[0])
 
         grads = tape.gradient(total_loss, self.actor_critic.trainable_variables)
         return grads
