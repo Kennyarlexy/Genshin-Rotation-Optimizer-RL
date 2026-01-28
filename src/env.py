@@ -286,7 +286,7 @@ class GcsimV1(GcsimEnv):
     @override
     def step(self, action: int) -> tuple[GcsimState, float, bool, GcsimRunInfo | None]:
         if self.done and not self.auto_reset:
-            return copy.deepcopy(self.state), 0.0, True
+            return copy.deepcopy(self.state), 0.0, True, None
         
         self.step_count += 1
         self.state.action_seq[self.step_count] = action + self.n_special_actions
@@ -366,9 +366,9 @@ class GcsimV2(GcsimEnv):
         return copy.deepcopy(self.state)
         
     @override
-    def step(self, action: int) -> tuple[GcsimState, float, bool, GcsimRunInfo]:        
+    def step(self, action: int) -> tuple[GcsimState, float, bool, GcsimRunInfo | None]:        
         if self.done and not self.auto_reset:
-            return copy.deepcopy(self.state), 0.0, True
+            return copy.deepcopy(self.state), 0.0, True, None
         
         self._update_config_file(action)
         run_info = self._run_gcsim()
