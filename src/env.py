@@ -1,4 +1,4 @@
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from typing import override
 from pathlib import Path
 from dataclasses import dataclass
@@ -47,7 +47,7 @@ class GcsimSampleInfo:
     wasted_frames: list[int]
 
 
-class GcsimEnv:
+class GcsimEnv(ABC):
     """
     A custom environment following the Gymnasium interface.
     """
