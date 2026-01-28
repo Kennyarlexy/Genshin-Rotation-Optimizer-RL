@@ -141,7 +141,7 @@ class GcsimEnv(ABC):
         if self.config_file:
             self.config_file.close()
 
-        print("env closed...")
+        print(f"env {self.id} closed...")
 
     def get_n_actions(self) -> int:
         return len(self.action_list)
