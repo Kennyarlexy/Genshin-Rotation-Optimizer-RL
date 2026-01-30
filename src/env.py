@@ -19,7 +19,7 @@ class GcsimState:
     action_seq: np.ndarray
     action_frames: np.ndarray | None = None
     relative_action_frames: np.ndarray | None = None    # difference between the latest action and all pass actions
-    duration_left: np.ndarray | float | None = None
+    duration_left: float | None = None
     remaining_skill_cds: np.ndarray | None = None       # for every character in config header, even if no actions have been executed
 
 
