@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import override
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field, InitVar
+from utils import return_none_on_error
 import numpy as np
 import subprocess
 import re
@@ -14,13 +15,91 @@ PROJECT_ROOT = SCRIPT_PATH.parent.parent
 @dataclass
 class GcsimState:
     """
-    everything except action_seq are normalized to be real number between [0, 1]
+    :var action_seq: sequence of action tokens encoded in int
+    :var action_frames: frames when an action happen corresponding to action_seq
+    :var duration_left: how many seconds left until termination (running out of time)
+    :var rem_skill_cds_norm: ratio between current cds (affected by cd reductions) and the original cooldown
+
+    TODO:
+    docs for the rest of the attrs
     """
     action_seq: np.ndarray
     action_frames: np.ndarray | None = None
-    relative_action_frames: np.ndarray | None = None    # difference between the latest action and all pass actions
     duration_left: float | None = None
-    remaining_skill_cds: np.ndarray | None = None       # for every character in config header, even if no actions have been executed
+    rem_skill_cds_ratio: np.ndarray | None = None
+
+    # special/private attributes
+    duration: InitVar[float | None] = None
+    _duration: float | None = field(init=False, repr=False)
+    seq_ctx_window: InitVar[float | None] = None
+    _seq_ctx_window: float | None = field(init=False, repr=False)
+
+    def __post_init__(self, duration, seq_ctx_window):
+        self._duration = duration
+        self._seq_ctx_window = seq_ctx_window
+    
+    @property
+    @return_none_on_error
+    def relative_action_frames(self) -> np.ndarray:
+        result = self.action_frames
+        mx = np.argmax(result)
+        return np.where(result != GcsimEnv.UNDEFINED_VALUE, result[mx] - result, result)
+    
+    @property
+    @return_none_on_error
+    def relative_action_frames_norm(self) -> np.ndarray:
+        result = self.relative_action_frames
+        return np.where(result != GcsimEnv.UNDEFINED_VALUE, result / (60*self._duration), result)
+
+    @property
+    @return_none_on_error
+    def action_frames_norm(self) -> np.ndarray:
+        result = self.action_frames
+        return np.where(result != GcsimEnv.UNDEFINED_VALUE, result / (60*self._duration), result)
+
+    @property
+    @return_none_on_error
+    def duration_left_norm(self) -> float:
+        return self.duration_left / self._duration
+        
+    @property
+    @return_none_on_error
+    def ctx_action_seq(self) -> np.ndarray:        
+        mx = np.argmax(self.action_frames)
+        outdated_cnt = np.sum((self.action_frames[mx] - self.action_frames[:mx+1]) > (self._seq_ctx_window*60))
+        result = np.full_like(self.action_seq, GcsimEnv.SPECIAL_ACTIONS["<none>"])
+        result[:mx-outdated_cnt+1] = self.action_seq[outdated_cnt:mx+1]
+
+        return result
+    
+    @property
+    @return_none_on_error
+    def ctx_action_frames(self) -> np.ndarray:
+        mx = np.argmax(self.action_frames)
+        outdated_cnt = np.sum((self.action_frames[mx] - self.action_frames[:mx+1]) > (self._seq_ctx_window*60))
+        result = np.full_like(self.action_frames, GcsimEnv.UNDEFINED_VALUE)
+        result[:mx-outdated_cnt+1] = self.action_frames[outdated_cnt:mx+1]
+
+        return result
+    
+    @property
+    @return_none_on_error
+    def ctx_action_frames_norm(self) -> np.ndarray:
+        result = self.ctx_action_frames
+        return np.where(result != GcsimEnv.UNDEFINED_VALUE, result / (60*self._duration), result)
+    
+    @property
+    @return_none_on_error
+    def ctx_relative_action_frames(self) -> np.ndarray:
+        result = self.ctx_action_frames
+        mx = np.argmax(result)
+        return np.where(result != GcsimEnv.UNDEFINED_VALUE, result[mx] - result, result)
+    
+    @property
+    @return_none_on_error
+    def ctx_relative_action_frames_norm(self) -> np.ndarray:
+        result = self.ctx_relative_action_frames
+        return np.where(result != GcsimEnv.UNDEFINED_VALUE, result / (60*self._seq_ctx_window), result)
 
 
 @dataclass
@@ -84,6 +163,8 @@ class GcsimEnv(ABC):
     }
 
     N_CHARACTERS = 4
+
+    UNDEFINED_VALUE = -1
     
     instance_cnt = 0
     
@@ -338,13 +419,13 @@ class GcsimV2(GcsimEnv):
         self.duration = duration
         self.state = GcsimState(
             action_seq=np.zeros((self.MAX_SEQ_LEN,), dtype=np.int32), 
-            action_frames=np.zeros((self.MAX_SEQ_LEN,), dtype=np.float32), 
-            relative_action_frames=np.zeros((self.MAX_SEQ_LEN,), dtype=np.float32), 
-            duration_left=1.0,
-            remaining_skill_cds=np.zeros((self.N_CHARACTERS,), dtype=np.float32)
+            action_frames=np.zeros((self.MAX_SEQ_LEN,), dtype=np.int32), 
+            duration_left=self.duration,
+            rem_skill_cds_ratio=np.zeros((self.N_CHARACTERS,), dtype=np.float32),
+            duration=self.duration,
+            seq_ctx_window=30.0,
         )
-        self.state.action_frames[1:] = -1
-        self.state.relative_action_frames[1:] = -1
+        self.state.action_frames[1:] = GcsimEnv.UNDEFINED_VALUE
         self.state.action_seq[0] = self.SPECIAL_ACTIONS["<start>"]
         self.step_count = 0
 
@@ -356,11 +437,9 @@ class GcsimV2(GcsimEnv):
 
         self.step_count = 0
         self.state.action_seq[1:] = self.SPECIAL_ACTIONS["<none>"]
-        self.state.action_frames[1:] = -1
-        self.state.relative_action_frames[0] = 0
-        self.state.relative_action_frames[1:] = -1
-        self.state.duration_left = 1 # normalized (full duration is 1)
-        self.state.remaining_skill_cds[:] = 0
+        self.state.action_frames[1:] = GcsimEnv.UNDEFINED_VALUE
+        self.state.duration_left = self.duration # normalized (full duration is 1)
+        self.state.rem_skill_cds_ratio[:] = 0
         self.last_action_frame = None
 
         return copy.deepcopy(self.state)
@@ -376,10 +455,9 @@ class GcsimV2(GcsimEnv):
         
         self.step_count += 1
         self.state.action_seq[self.step_count] = action + self.n_special_actions
-        self.state.action_frames[self.step_count] = sample_info.action_frames[-1] / (60*self.duration)
-        self.state.relative_action_frames[:self.step_count + 1] = self.state.action_frames[self.step_count] - self.state.action_frames[:self.step_count + 1]
-        self.state.duration_left = (self.duration - (sample_info.action_frames[-1] / 60)) / self.duration
-        self.state.remaining_skill_cds = self._compute_remaining_skill_cds(sample_info)
+        self.state.action_frames[self.step_count] = sample_info.action_frames[-1]
+        self.state.duration_left = (self.duration - (sample_info.action_frames[-1] / 60))
+        self.state.rem_skill_cds_ratio = self._compute_remaining_skill_cds(sample_info)
 
         reward = 0.0 
         done = (sample_info.action_frames[-1] == self.last_action_frame)

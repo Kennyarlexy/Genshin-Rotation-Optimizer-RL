@@ -96,30 +96,30 @@ class Agent:
         Unpack into dictionary containing tensors with correct shapes for feed forward
         """
 
-        action_seq = tf.convert_to_tensor([state.action_seq for state in states], dtype=tf.int32)
+        action_seq = tf.convert_to_tensor([state.ctx_action_seq for state in states], dtype=tf.int32)
 
         action_frames = None
-        if states[0].action_frames is not None:
-            action_frames = tf.convert_to_tensor([state.action_frames for state in states], dtype=tf.float32)
+        if (action_frames_norm := states[0].ctx_action_frames_norm) is not None:
+            action_frames = tf.convert_to_tensor([action_frames_norm] + [state.ctx_action_frames_norm for state in states[1:]], dtype=tf.float32)
 
         relative_action_frames = None
-        if states[0].relative_action_frames is not None:
-            relative_action_frames = tf.convert_to_tensor([state.relative_action_frames for state in states], dtype=tf.float32)
+        if (relative_action_frames_norm := states[0].ctx_relative_action_frames_norm) is not None:
+            relative_action_frames = tf.convert_to_tensor([relative_action_frames_norm] + [state.ctx_relative_action_frames_norm for state in states[1:]], dtype=tf.float32)
         
         duration_left = None
-        if states[0].duration_left is not None:
-            duration_left = tf.expand_dims([state.duration_left for state in states], axis=-1)
+        if (duration_left_norm := states[0].duration_left_norm) is not None:
+            duration_left = tf.expand_dims([duration_left_norm] + [state.duration_left_norm for state in states[1:]], axis=-1)
 
-        remaining_skill_cds = None
-        if states[0].remaining_skill_cds is not None:
-            remaining_skill_cds = tf.convert_to_tensor([state.remaining_skill_cds for state in states], dtype=tf.float32)
+        rem_skill_cds = None
+        if (rem_skill_cds_ratio := states[0].rem_skill_cds_ratio) is not None:
+            rem_skill_cds = tf.convert_to_tensor([rem_skill_cds_ratio] + [state.rem_skill_cds_ratio for state in states[1:]], dtype=tf.float32)
 
         unpacked_state = {
             "action_seq": action_seq,
             "action_frames": action_frames,
             "relative_action_frames": relative_action_frames,
             "duration_left": duration_left,
-            "remaining_skill_cds": remaining_skill_cds,
+            "remaining_skill_cds": rem_skill_cds,
         }
 
         return unpacked_state
