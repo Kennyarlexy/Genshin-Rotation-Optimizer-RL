@@ -380,8 +380,9 @@ class GcsimV1(GcsimEnv):
             run_info = self._run_gcsim()
             reward = self._compute_reward(run_info.dps)
             self.done = True
-            if self.auto_reset:
-                self.reset()
+        
+        if done and self.auto_reset:
+            return self.reset(), reward, done, run_info
         
         return copy.deepcopy(self.state), reward, done, run_info
 
@@ -466,8 +467,6 @@ class GcsimV2(GcsimEnv):
         if done:
             damage = sample_info.damages[-1]
             self.done = True
-            if self.auto_reset:
-                self.reset() # affect self.state under the hood
         elif self.step_count > 1:
             damage = sample_info.damages[-2]
 
@@ -479,6 +478,9 @@ class GcsimV2(GcsimEnv):
         penalty = 0.0 if done else sample_info.wasted_frames[-1] / 1200
         total_reward = reward - penalty
         
+        if done and self.auto_reset:
+            return self.reset(), total_reward, done, run_info
+
         return copy.deepcopy(self.state), total_reward, done, run_info
     
     def _compute_remaining_skill_cds(self, sample_info: GcsimSampleInfo) -> np.ndarray:
