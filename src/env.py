@@ -476,7 +476,7 @@ class GcsimV2(GcsimEnv):
         # get 1 reward for every 500K damage dealt between the last action and prev action
         reward = damage / 5e5
         # get 1 penalty for every 1200 wasted frames caused by the last action
-        penalty = sample_info.wasted_frames[-1] / 1200
+        penalty = 0.0 if done else sample_info.wasted_frames[-1] / 1200
         total_reward = reward - penalty
         
         return copy.deepcopy(self.state), total_reward, done, run_info
