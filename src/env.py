@@ -459,27 +459,27 @@ class GcsimV2(GcsimEnv):
         self.state.duration_left = (self.duration - (sample_info.action_frames[-1] / 60))
         self.state.rem_skill_cds_ratio = self._compute_remaining_skill_cds(sample_info)
 
-        reward = 0.0 
-        done = (sample_info.action_frames[-1] == self.last_action_frame)
-        self.last_action_frame = sample_info.action_frames[-1]
-
         assert abs(sum(sample_info.damages) - run_info.total_dmg) < 1.0, "damage from running the sim vs obtained from sample is different"
+
+        damage = 0.0
+        done = (sample_info.action_frames[-1] == self.last_action_frame)
         if done:
-            reward = sample_info.damages[-1]
+            damage = sample_info.damages[-1]
             self.done = True
             if self.auto_reset:
                 self.reset() # affect self.state under the hood
         elif self.step_count > 1:
-            reward = sample_info.damages[-2]
+            damage = sample_info.damages[-2]
+
+        self.last_action_frame = sample_info.action_frames[-1]
         
         # get 1 reward for every 500K damage dealt between the last action and prev action
-        reward /= 5e5
+        reward = damage / 5e5
         # get 1 penalty for every 1200 wasted frames caused by the last action
         penalty = sample_info.wasted_frames[-1] / 1200
-
-        reward -= penalty
+        total_reward = reward - penalty
         
-        return copy.deepcopy(self.state), reward, done, run_info
+        return copy.deepcopy(self.state), total_reward, done, run_info
     
     def _compute_remaining_skill_cds(self, sample_info: GcsimSampleInfo) -> np.ndarray:
         skill_ready_frames = np.array(sample_info.skill_ready_frames, dtype=np.float32)
