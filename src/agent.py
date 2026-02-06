@@ -251,4 +251,5 @@ if __name__ == "__main__":
         traceback.print_exc() 
 
     train_env.close()
+    eval_env.close()
     print("Training finished")
